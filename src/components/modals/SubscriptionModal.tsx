@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { X, CreditCard, CheckCircle2, PawPrint, Smartphone, Loader2, ShieldCheck } from 'lucide-react';
 
 interface SubscriptionModalProps {
     isOpen: boolean;
@@ -38,19 +39,20 @@ export default function SubscriptionModal({ isOpen, onClose, creatorName, price,
         setTimeout(() => {
             setProcessing(false);
             onSuccess();
-            onClose();
+            // onClose(); // onSuccess logic in Feed usually closes it, but let's be safe or let Feed handle it.
+            // Feed.tsx: handleSubscriptionSuccess sets isOpen: false. So this is fine.
             const successMsg = paymentMethod === 'paws'
-                ? `Paws Pay Payment Successful! number received prompt.`
+                ? `Paws Pay Payment Successful! Check your phone for approval prompt.`
                 : `Payment Successful! You are now subscribed to ${creatorName}.`;
             alert(successMsg);
-        }, 2000);
+        }, 1500);
     };
 
     return (
-        <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer">
+        <div onClick={onClose} className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer">
             <div onClick={(e) => e.stopPropagation()} className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl relative cursor-default">
                 <button onClick={onClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors z-10">
-                    <span className="iconify" data-icon="lucide:x" data-width="20"></span>
+                    <X className="w-5 h-5" />
                 </button>
 
                 {/* Header */}
@@ -68,18 +70,18 @@ export default function SubscriptionModal({ isOpen, onClose, creatorName, price,
                             onClick={() => setPaymentMethod('card')}
                             className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${paymentMethod === 'card' ? 'bg-amber-500/10 border-amber-500/50 text-amber-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'}`}
                         >
-                            <span className="iconify" data-icon="lucide:credit-card" data-width="20"></span>
+                            <CreditCard className="w-5 h-5" />
                             <span className="text-sm font-medium">Pay with Card</span>
-                            {paymentMethod === 'card' && <span className="iconify ml-auto" data-icon="lucide:check-circle-2" data-width="18"></span>}
+                            {paymentMethod === 'card' && <CheckCircle2 className="w-4.5 h-4.5 ml-auto" />}
                         </button>
 
                         <button
                             onClick={() => setPaymentMethod('paws')}
                             className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all ${paymentMethod === 'paws' ? 'bg-amber-500/10 border-amber-500/50 text-amber-500' : 'bg-zinc-950 border-zinc-800 text-zinc-400 hover:border-zinc-700'}`}
                         >
-                            <span className="iconify" data-icon="lucide:paw-print" data-width="20"></span>
+                            <PawPrint className="w-5 h-5" />
                             <span className="text-sm font-medium">Mobile Money</span>
-                            {paymentMethod === 'paws' && <span className="iconify ml-auto" data-icon="lucide:check-circle-2" data-width="18"></span>}
+                            {paymentMethod === 'paws' && <CheckCircle2 className="w-4.5 h-4.5 ml-auto" />}
                         </button>
 
                         {paymentMethod === 'paws' && (
@@ -93,7 +95,7 @@ export default function SubscriptionModal({ isOpen, onClose, creatorName, price,
                                         placeholder="099 123 4567"
                                         className={`w-full bg-zinc-900 border ${phoneNumberError ? 'border-red-500 focus:border-red-500' : 'border-zinc-700 focus:border-amber-500'} rounded-xl p-3 text-white text-sm outline-none transition-all placeholder:text-zinc-600`}
                                     />
-                                    <span className="iconify absolute right-3 top-3 text-zinc-500" data-icon="lucide:smartphone" data-width="18"></span>
+                                    <Smartphone className="absolute right-3 top-3 text-zinc-500 w-4.5 h-4.5" />
                                 </div>
                                 {phoneNumberError && <p className="text-red-500 text-xs mt-1.5 ml-1">{phoneNumberError}</p>}
                                 <p className="text-[10px] text-zinc-500 mt-2 ml-1">
@@ -104,7 +106,7 @@ export default function SubscriptionModal({ isOpen, onClose, creatorName, price,
                     </div>
 
                     <div className="bg-zinc-950 rounded-lg p-3 mb-6 flex items-start gap-2 border border-zinc-800/50">
-                        <span className="iconify text-zinc-500 mt-0.5" data-icon="lucide:shield-check" data-width="16"></span>
+                        <ShieldCheck className="text-zinc-500 w-4 h-4 mt-0.5 shrink-0" />
                         <p className="text-[10px] text-zinc-500 leading-relaxed">
                             Payments are secure and encrypted. Cancel anytime from your settings. You will be charged immediately.
                         </p>
@@ -117,7 +119,7 @@ export default function SubscriptionModal({ isOpen, onClose, creatorName, price,
                     >
                         {processing ? (
                             <>
-                                <span className="iconify animate-spin" data-icon="lucide:loader-2" data-width="18"></span>
+                                <Loader2 className="w-4.5 h-4.5 animate-spin" />
                                 Processing...
                             </>
                         ) : (
