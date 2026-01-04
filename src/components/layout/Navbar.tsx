@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import LoginModal from '@/components/modals/LoginModal';
+import Image from 'next/image';
 
 export default function Navbar() {
     const { isLoggedIn, user, logout } = useAuth();
@@ -39,16 +40,23 @@ export default function Navbar() {
                 {/* User Actions */}
                 <div className="flex items-center space-x-4">
                     {isLoggedIn && user ? (
+
                         <div className="flex items-center gap-4">
                             <div className="hidden md:flex flex-col items-end">
-                                <span className="text-sm font-semibold text-white">{user.name}</span>
-                                <span className="text-xs text-zinc-500">{user.handle}</span>
+                                <span className="text-sm font-semibold text-white">{user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'}</span>
+                                <span className="text-xs text-zinc-500">@{user.user_metadata?.username || user.email?.split('@')[0] || 'user'}</span>
                             </div>
                             <button onClick={logout} className="text-xs text-zinc-400 hover:text-white transition-colors">
                                 Logout
                             </button>
                             <Link href="/profile">
-                                <img src={user.avatar} alt={user.name} className="w-9 h-9 rounded-full border border-white/20 hover:border-amber-500 transition-colors" />
+                                {user.user_metadata?.avatar_url ? (
+                                    <Image src={user.user_metadata.avatar_url} alt="Profile" width={36} height={36} className="rounded-full border border-white/20 hover:border-amber-500 transition-colors object-cover" />
+                                ) : (
+                                    <div className="w-9 h-9 rounded-full bg-zinc-800 border border-white/20 hover:border-amber-500 transition-colors flex items-center justify-center">
+                                        <span className="text-xs font-bold text-amber-500">{user.email?.[0].toUpperCase()}</span>
+                                    </div>
+                                )}
                             </Link>
                         </div>
                     ) : (

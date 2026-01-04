@@ -2,22 +2,27 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { STORIES, POSTS, CURRENT_USER } from '@/lib/mockData';
+import { STORIES, CURRENT_USER } from '@/lib/mockData'; // Keep STORIES mock for now
 import { useAuth } from '@/context/AuthContext';
 import LoginModal from '@/components/modals/LoginModal';
 import SubscriptionModal from '@/components/modals/SubscriptionModal';
+import { supabase } from '@/lib/supabase';
 import {
     HeartHandshake, Search, Bell, Plus, Image as LucideImage, Video, SlidersHorizontal,
-    Check, Star, MoreHorizontal, Lock, Unlock, Heart, MessageCircle, Banknote, Bookmark, X
+    Check, Star, MoreHorizontal, Lock, Unlock, Heart, MessageCircle, Banknote, Bookmark, X, Loader2
 } from 'lucide-react';
 
 export default function Feed() {
-    const { isLoggedIn } = useAuth();
+    const { isLoggedIn, user } = useAuth();
 
     // UI State
     const [activeTab, setActiveTab] = useState<'subscribed' | 'recommended'>('recommended');
     const [activeStory, setActiveStory] = useState<string | null>(null);
     const [showLoginModal, setShowLoginModal] = useState(false);
+
+    // Data State
+    const [posts, setPosts] = useState<any[]>([]);
+    const [isLoadingPosts, setIsLoadingPosts] = useState(true);
 
     // Subscription/Unlock State
     const [subModalData, setSubModalData] = useState<{ isOpen: boolean; creator: string; price: string; postId?: string }>({ isOpen: false, creator: '', price: '' });
@@ -31,6 +36,43 @@ export default function Feed() {
     // Story Timer
     const STORY_DURATION_MS = 25000; // 25 seconds
     const [storyProgress, setStoryProgress] = useState(0);
+
+    const fetchPosts = async () => {
+        setIsLoadingPosts(true);
+        try {
+            const { data, error } = await supabase
+                .from('posts')
+                .select(`
+                    id,
+                    content,
+                    image_url,
+                    created_at,
+                    is_premium,
+                    price,
+                    profiles (
+                        full_name,
+                        username,
+                        avatar_url,
+                        is_verified
+                    )
+                `)
+                .order('created_at', { ascending: false });
+
+            if (error) {
+                console.error('Error fetching posts:', error);
+            } else {
+                setPosts(data || []);
+            }
+        } catch (err) {
+            console.error('Unexpected error:', err);
+        } finally {
+            setIsLoadingPosts(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchPosts();
+    }, []);
 
     useEffect(() => {
         let interval: NodeJS.Timeout;
@@ -110,6 +152,11 @@ export default function Feed() {
 
     const currentStory = activeStory ? STORIES.find(s => s.id === activeStory) : null;
 
+    // Helper to format currency
+    const formatCurrency = (amount: number) => {
+        return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount);
+    };
+
     return (
         <>
             {/* Mobile Top Header (Visible only on mobile) */}
@@ -145,7 +192,7 @@ export default function Feed() {
                             {/* My Story */}
                             <div className="flex flex-col items-center gap-1.5 min-w-[72px] cursor-pointer group" onClick={() => alert("Add to your story!")}>
                                 <div className="w-[64px] h-[64px] md:w-[70px] md:h-[70px] rounded-full border border-dashed border-zinc-600 p-1 group-hover:border-zinc-400 transition-colors relative">
-                                    <img src={CURRENT_USER.avatar} alt="My Story" className="w-full h-full rounded-full object-cover opacity-60" />
+                                    <img src={user?.user_metadata?.avatar_url || CURRENT_USER.avatar} alt="My Story" className="w-full h-full rounded-full object-cover opacity-60" />
                                     <div className="absolute inset-0 flex items-center justify-center bg-black/20 rounded-full">
                                         <Plus className="text-white drop-shadow-md w-6 h-6" strokeWidth={2} />
                                     </div>
@@ -173,9 +220,11 @@ export default function Feed() {
                     <div className="hidden md:block px-4 mb-8 mt-4">
                         <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-4 focus-within:ring-1 focus-within:ring-amber-500/50 transition-all focus-within:bg-zinc-900/60">
                             <div className="flex gap-4">
-                                <img src={CURRENT_USER.avatar} alt="User" className="w-10 h-10 rounded-full object-cover" />
+                                <img src={user?.user_metadata?.avatar_url || CURRENT_USER.avatar} alt="User" className="w-10 h-10 rounded-full object-cover" />
                                 <div className="flex-1">
-                                    <input type="text" placeholder="Create a new post..." className="w-full bg-transparent text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none py-2.5" />
+                                    <Link href="/create" className="block w-full text-left bg-transparent text-sm text-zinc-500 cursor-text py-2.5">
+                                        Create a new post...
+                                    </Link>
                                     <div className="flex items-center justify-between mt-3 pt-3 border-t border-zinc-800/50">
                                         <div className="flex gap-2 text-zinc-400">
                                             <button className="hover:text-amber-500 p-2 hover:bg-zinc-800 rounded-lg transition-all">
@@ -185,12 +234,12 @@ export default function Feed() {
                                                 <Video className="w-[18px] h-[18px]" strokeWidth={1.5} />
                                             </button>
                                         </div>
-                                        <button
-                                            onClick={() => alert("Post functionality is demo only.")}
+                                        <Link
+                                            href="/create"
                                             className="bg-zinc-100 text-zinc-950 px-5 py-1.5 rounded-full text-xs font-bold hover:bg-white transition-colors shadow-lg shadow-white/5"
                                         >
                                             Post
-                                        </button>
+                                        </Link>
                                     </div>
                                 </div>
                             </div>
@@ -221,167 +270,162 @@ export default function Feed() {
                 </div>
 
                 {/* Posts Feed */}
-                {POSTS.map(post => {
-                    const isUnlocked = unlockedPosts[post.id] || subscribedCreators[post.author.name];
-                    const isLocked = post.meta.isPremium && !isUnlocked;
+                {isLoadingPosts ? (
+                    <div className="flex justify-center py-20">
+                        <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+                    </div>
+                ) : posts.length === 0 ? (
+                    <div className="text-center py-20 text-zinc-500">
+                        <p>No posts yet. Be the first to post!</p>
+                        <Link href="/create" className="text-amber-500 hover:underline mt-2 inline-block">Create Post</Link>
+                    </div>
+                ) : (
+                    posts.map(post => {
+                        const profile = post.profiles; // Joined data
+                        const authorName = profile?.full_name || 'Unknown User';
+                        const authorHandle = profile?.username || 'user';
+                        const authorAvatar = profile?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50&h=50&fit=crop';
+                        const isVerified = profile?.is_verified;
 
-                    // Simple handle logic: remove @ if present
-                    const handlePath = post.author.handle.startsWith('@') ? post.author.handle.substring(1) : post.author.handle;
+                        const isUnlocked = unlockedPosts[post.id] || subscribedCreators[authorName] || post.user_id === user?.id; // Authour can always see
+                        const isLocked = post.is_premium && !isUnlocked;
 
-                    return (
-                        <article key={post.id} className="border-b border-zinc-800 md:border md:rounded-2xl md:bg-zinc-900/20 md:border-zinc-800/50 mb-6 overflow-hidden relative group">
-                            <div className="p-4 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <Link href={`/profile/${handlePath}`} className="relative cursor-pointer">
-                                        <img src={post.author.avatar} alt={post.author.name} className="w-10 h-10 rounded-full object-cover" />
-                                        {post.author.isVerified && (
-                                            <div className="absolute -bottom-1 -right-1 bg-amber-500 text-zinc-950 rounded-full p-0.5 border-2 border-zinc-950">
-                                                <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                        return (
+                            <article key={post.id} className="border-b border-zinc-800 md:border md:rounded-2xl md:bg-zinc-900/20 md:border-zinc-800/50 mb-6 overflow-hidden relative group">
+                                <div className="p-4 flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <Link href={`/profile/${authorHandle}`} className="relative cursor-pointer">
+                                            <img src={authorAvatar} alt={authorName} className="w-10 h-10 rounded-full object-cover" />
+                                            {isVerified && (
+                                                <div className="absolute -bottom-1 -right-1 bg-amber-500 text-zinc-950 rounded-full p-0.5 border-2 border-zinc-950">
+                                                    <Check className="w-2.5 h-2.5" strokeWidth={3} />
+                                                </div>
+                                            )}
+                                            {post.is_premium && (
+                                                <div className="absolute -bottom-1 -right-1 bg-amber-500 text-zinc-950 rounded-full p-0.5 border-2 border-zinc-950">
+                                                    <Star className="w-2.5 h-2.5" fill="currentColor" />
+                                                </div>
+                                            )}
+                                        </Link>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <Link href={`/profile/${authorHandle}`} className="text-sm font-semibold text-zinc-100 hover:underline cursor-pointer">
+                                                    {authorName}
+                                                </Link>
+                                                <span className="text-zinc-500 text-xs">@{authorHandle}</span>
                                             </div>
-                                        )}
-                                        {post.meta.isPremium && (
-                                            <div className="absolute -bottom-1 -right-1 bg-amber-500 text-zinc-950 rounded-full p-0.5 border-2 border-zinc-950">
-                                                <Star className="w-2.5 h-2.5" fill="currentColor" />
-                                            </div>
-                                        )}
-                                    </Link>
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <Link href={`/profile/${handlePath}`} className="text-sm font-semibold text-zinc-100 hover:underline cursor-pointer">
-                                                {post.author.name}
-                                            </Link>
-                                            <span className="text-zinc-500 text-xs">{post.author.handle}</span>
+                                            <p className="text-[11px] text-zinc-500">
+                                                {new Date(post.created_at).toLocaleDateString()} {post.is_premium && '• Subscribers only'}
+                                            </p>
                                         </div>
-                                        <p className="text-[11px] text-zinc-500">
-                                            {post.meta.time} {post.meta.location && `• ${post.meta.location}`} {post.meta.isPremium && '• Subscribers only'}
-                                        </p>
                                     </div>
-                                </div>
 
-                                {post.meta.isPremium ? (
-                                    <div className="flex items-center gap-2">
-                                        <span className="bg-zinc-800 text-zinc-400 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border border-zinc-700">Premium</span>
-                                        <button className="text-zinc-500 hover:text-zinc-300">
+                                    {post.is_premium ? (
+                                        <div className="flex items-center gap-2">
+                                            <span className="bg-zinc-800 text-zinc-400 text-[10px] uppercase tracking-wider font-bold px-2 py-0.5 rounded border border-zinc-700">Premium</span>
+                                            <button className="text-zinc-500 hover:text-zinc-300">
+                                                <MoreHorizontal className="w-5 h-5" />
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <button className="text-zinc-500 hover:text-zinc-300 p-2 hover:bg-zinc-800/50 rounded-full transition-colors">
                                             <MoreHorizontal className="w-5 h-5" />
                                         </button>
+                                    )}
+                                </div>
+
+                                <div className="px-4 pb-3">
+                                    <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
+                                        {post.content}
+                                    </p>
+                                </div>
+
+                                {/* Content Area (Image / Locked Overlay) */}
+                                {isLocked ? (
+                                    <div className="w-full aspect-[4/5] bg-zinc-900 relative overflow-hidden">
+                                        {post.image_url && (
+                                            <img src={post.image_url} className="w-full h-full object-cover blur-2xl opacity-40 scale-110" alt="Locked content logic" />
+                                        )}
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-black/40 backdrop-blur-md">
+                                            <div className="bg-zinc-950/60 border border-white/10 p-6 rounded-2xl max-w-[280px] w-full text-center shadow-2xl backdrop-blur-xl">
+                                                <div className="w-12 h-12 bg-zinc-800/80 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-500 border border-zinc-700 shadow-inner">
+                                                    <Lock className="w-[22px] h-[22px]" strokeWidth={2} />
+                                                </div>
+                                                <h4 className="text-zinc-100 font-medium mb-1.5">Unlock this post</h4>
+                                                <p className="text-zinc-400 text-xs mb-5 leading-relaxed">Subscribe to {authorName} to access this video and her full archive.</p>
+
+                                                <button
+                                                    onClick={() => initiateSubscribe(authorName, formatCurrency(post.price))}
+                                                    className="w-full bg-zinc-100 hover:bg-white text-zinc-950 font-semibold py-2.5 rounded-lg text-xs transition-all mb-2.5 shadow hover:shadow-lg"
+                                                >
+                                                    Subscribe • {formatCurrency(post.price || 2500)}
+                                                </button>
+                                                <button
+                                                    onClick={() => initiateUnlock(post.id, '₦500', authorName)}
+                                                    className="w-full border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600 text-zinc-300 font-medium py-2.5 rounded-lg text-xs transition-all"
+                                                >
+                                                    Unlock • ₦500
+                                                </button>
+                                            </div>
+                                        </div>
                                     </div>
                                 ) : (
-                                    <button className="text-zinc-500 hover:text-zinc-300 p-2 hover:bg-zinc-800/50 rounded-full transition-colors">
-                                        <MoreHorizontal className="w-5 h-5" />
-                                    </button>
-                                )}
-                            </div>
-
-                            <div className="px-4 pb-3">
-                                <p className="text-sm text-zinc-300 leading-relaxed">
-                                    {post.content.text}
-                                    {post.content.tags && post.content.tags.map(tag => (
-                                        <span key={tag} className="text-amber-500 cursor-pointer ml-1">{tag}</span>
-                                    ))}
-                                </p>
-                            </div>
-
-                            {/* Content Area (Image / Locked Overlay) */}
-                            {isLocked ? (
-                                <div className="w-full aspect-[4/5] bg-zinc-900 relative overflow-hidden">
-                                    {post.content.image && (
-                                        <img src={post.content.image} className="w-full h-full object-cover blur-2xl opacity-40 scale-110" alt="Locked content logic" />
-                                    )}
-                                    <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-black/40 backdrop-blur-md">
-                                        <div className="bg-zinc-950/60 border border-white/10 p-6 rounded-2xl max-w-[280px] w-full text-center shadow-2xl backdrop-blur-xl">
-                                            <div className="w-12 h-12 bg-zinc-800/80 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-500 border border-zinc-700 shadow-inner">
-                                                <Lock className="w-[22px] h-[22px]" strokeWidth={2} />
-                                            </div>
-                                            <h4 className="text-zinc-100 font-medium mb-1.5">Unlock this post</h4>
-                                            <p className="text-zinc-400 text-xs mb-5 leading-relaxed">Subscribe to {post.author.name} to access this video and her full archive.</p>
-
-                                            <button
-                                                onClick={() => initiateSubscribe(post.author.name, post.lock?.price)}
-                                                className="w-full bg-zinc-100 hover:bg-white text-zinc-950 font-semibold py-2.5 rounded-lg text-xs transition-all mb-2.5 shadow hover:shadow-lg"
-                                            >
-                                                {post.lock?.price}
-                                            </button>
-                                            <button
-                                                onClick={() => initiateUnlock(post.id, post.lock?.oneTimePrice || '₦500', post.author.name)}
-                                                className="w-full border border-zinc-700 hover:bg-zinc-800 hover:border-zinc-600 text-zinc-300 font-medium py-2.5 rounded-lg text-xs transition-all"
-                                            >
-                                                {post.lock?.oneTimePrice}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            ) : (
-                                post.content.image ? (
-                                    <div className="w-full bg-zinc-900 relative">
-                                        <img src={post.content.image} className="w-full h-auto object-cover max-h-[500px]" alt="Post" />
-                                        {/* Show 'Unlocked' badge if it was premium */}
-                                        {post.meta.isPremium && (
-                                            <div className="absolute top-4 right-4 bg-zinc-950/80 backdrop-blur text-amber-500 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-500/30 flex items-center gap-1.5">
-                                                <Unlock className="w-3.5 h-3.5" />
-                                                Unlocked
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : null
-                            )}
-
-                            {/* Footer / Actions */}
-                            <div className={`p-3 md:p-4 ${isLocked ? 'border-t border-zinc-800/50 flex justify-between items-center opacity-40 select-none' : ''}`}>
-                                <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-1">
-                                        <button
-                                            onClick={() => toggleLike(post.id)}
-                                            className={`flex items-center gap-1.5 p-2 rounded-lg transition-all group ${likedPosts[post.id] ? 'text-rose-500 bg-rose-500/10' : 'text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10'}`}
-                                            disabled={isLocked}
-                                        >
-                                            <Heart className={`w-[22px] h-[22px] group-hover:scale-110 transition-transform ${likedPosts[post.id] ? 'fill-current' : ''}`} strokeWidth={1.5} />
-                                            <span className="text-xs font-medium">{likedPosts[post.id] ? 'Liked' : post.stats.likes}</span>
-                                        </button>
-                                        <button
-                                            onClick={handleComment}
-                                            className="flex items-center gap-1.5 p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-all group"
-                                            disabled={isLocked}
-                                        >
-                                            <MessageCircle className="w-[22px] h-[22px] group-hover:scale-110 transition-transform" strokeWidth={1.5} />
-                                            <span className="text-xs font-medium">{post.stats.comments}</span>
-                                        </button>
-                                        <button
-                                            onClick={() => handleTip(post.author.name)}
-                                            className="flex items-center gap-1.5 p-2 rounded-lg text-zinc-400 hover:text-green-400 hover:bg-green-500/10 transition-all group"
-                                            disabled={isLocked}
-                                        >
-                                            <Banknote className="w-[22px] h-[22px] group-hover:scale-110 transition-transform" strokeWidth={1.5} />
-                                            <span className="text-xs font-medium">Tip</span>
-                                        </button>
-                                    </div>
-                                    <button
-                                        onClick={() => toggleBookmark(post.id)}
-                                        className={`p-2 rounded-lg transition-colors ${bookmarkedPosts[post.id] ? 'text-amber-500 hover:bg-amber-500/10' : 'text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10'}`}
-                                        disabled={isLocked}
-                                    >
-                                        <Bookmark className={`w-[22px] h-[22px] ${bookmarkedPosts[post.id] ? 'fill-current' : ''}`} strokeWidth={1.5} />
-                                    </button>
-                                </div>
-
-                                {!isLocked && post.stats.likedBy && (
-                                    <div className="flex items-center gap-2 px-2">
-                                        <div className="flex -space-x-2">
-                                            {/* Helper for mock avatars */}
-                                            {['https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=50&h=50&fit=crop', 'https://images.unsplash.com/photo-1506277886164-e25aa3f4ef7f?w=50&h=50&fit=crop'].map((src, i) => (
-                                                <div key={i} className="w-5 h-5 rounded-full border border-zinc-900 bg-zinc-700 overflow-hidden">
-                                                    <img src={src} className="w-full h-full object-cover" />
+                                    post.image_url ? (
+                                        <div className="w-full bg-zinc-900 relative">
+                                            <img src={post.image_url} className="w-full h-auto object-cover max-h-[500px]" alt="Post" />
+                                            {/* Show 'Unlocked' badge if it was premium */}
+                                            {post.is_premium && (
+                                                <div className="absolute top-4 right-4 bg-zinc-950/80 backdrop-blur text-amber-500 text-xs font-bold px-3 py-1.5 rounded-full border border-amber-500/30 flex items-center gap-1.5">
+                                                    <Unlock className="w-3.5 h-3.5" />
+                                                    Unlocked
                                                 </div>
-                                            ))}
+                                            )}
                                         </div>
-                                        <p className="text-xs text-zinc-500">
-                                            Liked by <span className="text-zinc-300 font-medium">{post.stats.likedBy[0]}</span> and others
-                                        </p>
-                                    </div>
+                                    ) : null
                                 )}
-                            </div>
-                        </article>
-                    );
-                })}
+
+                                {/* Footer / Actions */}
+                                <div className={`p-3 md:p-4 ${isLocked ? 'border-t border-zinc-800/50 flex justify-between items-center opacity-40 select-none' : ''}`}>
+                                    <div className="flex items-center justify-between mb-3">
+                                        <div className="flex items-center gap-1">
+                                            <button
+                                                onClick={() => toggleLike(post.id)}
+                                                className={`flex items-center gap-1.5 p-2 rounded-lg transition-all group ${likedPosts[post.id] ? 'text-rose-500 bg-rose-500/10' : 'text-zinc-400 hover:text-rose-500 hover:bg-rose-500/10'}`}
+                                                disabled={isLocked}
+                                            >
+                                                <Heart className={`w-[22px] h-[22px] group-hover:scale-110 transition-transform ${likedPosts[post.id] ? 'fill-current' : ''}`} strokeWidth={1.5} />
+                                                <span className="text-xs font-medium">{likedPosts[post.id] ? '1' : '0'}</span>
+                                            </button>
+                                            <button
+                                                onClick={handleComment}
+                                                className="flex items-center gap-1.5 p-2 rounded-lg text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-all group"
+                                                disabled={isLocked}
+                                            >
+                                                <MessageCircle className="w-[22px] h-[22px] group-hover:scale-110 transition-transform" strokeWidth={1.5} />
+                                                <span className="text-xs font-medium">0</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleTip(authorName)}
+                                                className="flex items-center gap-1.5 p-2 rounded-lg text-zinc-400 hover:text-green-400 hover:bg-green-500/10 transition-all group"
+                                                disabled={isLocked}
+                                            >
+                                                <Banknote className="w-[22px] h-[22px] group-hover:scale-110 transition-transform" strokeWidth={1.5} />
+                                                <span className="text-xs font-medium">Tip</span>
+                                            </button>
+                                        </div>
+                                        <button
+                                            onClick={() => toggleBookmark(post.id)}
+                                            className={`p-2 rounded-lg transition-colors ${bookmarkedPosts[post.id] ? 'text-amber-500 hover:bg-amber-500/10' : 'text-zinc-400 hover:text-amber-400 hover:bg-amber-500/10'}`}
+                                            disabled={isLocked}
+                                        >
+                                            <Bookmark className={`w-[22px] h-[22px] ${bookmarkedPosts[post.id] ? 'fill-current' : ''}`} strokeWidth={1.5} />
+                                        </button>
+                                    </div>
+                                </div>
+                            </article>
+                        );
+                    })
+                )}
 
                 {/* Footer Links (Mobile only) */}
                 <div className="md:hidden py-6 text-center space-y-2 border-t border-zinc-900 mt-8">
@@ -406,8 +450,6 @@ export default function Feed() {
                                 <span className="text-white/60 text-xs">25s</span>
                             </div>
                             <div className="flex items-center gap-4 p-2 relative z-50">
-                                {/* High z-index on container to ensure clickability */}
-                                {/* High z-index on container to ensure clickability */}
                                 <button
                                     onClick={(e) => { e.stopPropagation(); setActiveStory(null); }}
                                     className="text-white hover:text-amber-500 bg-white/10 backdrop-blur-md p-2 rounded-full transition-colors cursor-pointer"

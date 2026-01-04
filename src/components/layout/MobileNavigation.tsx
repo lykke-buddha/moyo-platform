@@ -1,13 +1,14 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { Home, Compass, Plus, MessageCircle, User } from 'lucide-react';
+import { Home, Compass, Plus, MessageCircle, User, LogIn } from 'lucide-react';
 
 export default function MobileNavigation() {
     const pathname = usePathname();
-    const { isLoggedIn } = useAuth();
+    const { isLoggedIn, openLoginModal } = useAuth();
 
     const isActive = (path: string) => pathname === path;
 
@@ -50,15 +51,23 @@ export default function MobileNavigation() {
                 </Link>
             )}
 
-            <Link
-                href="/profile"
-                className={`${pathname.startsWith('/profile') ? 'text-amber-500' : 'text-zinc-500 hover:text-zinc-300'} flex flex-col items-center justify-center w-full h-full gap-0.5 transition-colors`}
-            >
-                {/* <div className={`w-6 h-6 rounded-full overflow-hidden border ${pathname.startsWith('/profile') ? 'border-amber-500' : 'border-zinc-700'} bg-zinc-800`}>
-                </div> */}
-                <User className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith('/profile') ? 2 : 1.5} />
-                <span className="text-[10px] font-medium">Profile</span>
-            </Link>
+            {isLoggedIn ? (
+                <Link
+                    href="/profile"
+                    className={`${pathname.startsWith('/profile') ? 'text-amber-500' : 'text-zinc-500 hover:text-zinc-300'} flex flex-col items-center justify-center w-full h-full gap-0.5 transition-colors`}
+                >
+                    <User className="w-[22px] h-[22px]" strokeWidth={pathname.startsWith('/profile') ? 2 : 1.5} />
+                    <span className="text-[10px] font-medium">Profile</span>
+                </Link>
+            ) : (
+                <button
+                    onClick={openLoginModal}
+                    className="text-zinc-500 hover:text-zinc-300 flex flex-col items-center justify-center w-full h-full gap-0.5 transition-colors"
+                >
+                    <LogIn className="w-[22px] h-[22px]" strokeWidth={1.5} />
+                    <span className="text-[10px] font-medium">Login</span>
+                </button>
+            )}
         </div>
     );
 }

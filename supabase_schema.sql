@@ -32,7 +32,7 @@ create table public.posts (
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   content text,
   image_url text,
-  video_url text, -– optional
+  video_url text, -- optional
   is_premium boolean default false,
   price numeric(10, 2) default 0,
   tags text[]

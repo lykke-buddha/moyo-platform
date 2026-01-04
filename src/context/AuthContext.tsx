@@ -11,6 +11,9 @@ type AuthContextType = {
     login: (email: string, password?: string) => Promise<void>;
     signup: (email: string, password?: string) => Promise<void>;
     logout: () => Promise<void>;
+    isLoginModalOpen: boolean;
+    openLoginModal: () => void;
+    closeLoginModal: () => void;
 };
 
 const AuthContext = createContext<AuthContextType>({
@@ -20,11 +23,18 @@ const AuthContext = createContext<AuthContextType>({
     login: async () => { },
     signup: async () => { },
     logout: async () => { },
+    isLoginModalOpen: false,
+    openLoginModal: () => { },
+    closeLoginModal: () => { },
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+    const openLoginModal = () => setIsLoginModalOpen(true);
+    const closeLoginModal = () => setIsLoginModalOpen(false);
 
     useEffect(() => {
         // Check active session
@@ -83,7 +93,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
 
     return (
-        <AuthContext.Provider value={{ user, isLoggedIn: !!user, login, signup, logout, isLoading }}>
+        <AuthContext.Provider value={{
+            user,
+            isLoggedIn: !!user,
+            login,
+            signup,
+            logout,
+            isLoading,
+            isLoginModalOpen,
+            openLoginModal,
+            closeLoginModal
+        }}>
             {children}
         </AuthContext.Provider>
     );

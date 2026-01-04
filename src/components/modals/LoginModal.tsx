@@ -8,6 +8,8 @@ interface LoginModalProps {
     onClose: () => void;
 }
 
+import { toast } from 'sonner';
+
 export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     const [isLogin, setIsLogin] = useState(true);
     const [email, setEmail] = useState('');
@@ -18,23 +20,30 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const toastId = toast.loading(isLogin ? "Signing in..." : "Creating account...");
+
         try {
             if (isLogin) {
                 await login(email, password);
-                alert('Successfully Logged In! Welcome back.');
+                toast.success('Successfully Logged In! Welcome back.', { id: toastId });
                 onClose();
             } else {
                 await signup(email, password);
-                alert('Account created! Please check your email to confirm.');
+                toast.success('Account created! Please check your email to confirm.', { id: toastId });
                 onClose();
             }
-        } catch (error: any) {
-            alert(error.message);
+        } catch (error) {
+            console.error("Auth error:", error);
+            if (error instanceof Error) {
+                toast.error(error.message, { id: toastId });
+            } else {
+                toast.error('An error occurred during authentication', { id: toastId });
+            }
         }
     };
 
     return (
-        <div onClick={onClose} className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 cursor-pointer">
+        <div onClick={onClose} className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm cursor-pointer">
             <div onClick={(e) => e.stopPropagation()} className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-8 shadow-2xl relative overflow-hidden cursor-default">
                 {/* Decorative Elements */}
                 <div className="absolute -top-20 -right-20 w-40 h-40 bg-amber-500/10 rounded-full blur-3xl"></div>

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
+import { Toaster } from 'sonner';
 import "./globals.css";
 import Sidebar from "@/components/layout/Sidebar";
 import RightSidebar from "@/components/layout/RightSidebar";
@@ -38,6 +39,13 @@ export default function RootLayout({
 
           <RightSidebar />
           <MobileNavigation />
+          <Toaster position="bottom-center" toastOptions={{
+            style: {
+              background: '#18181b',
+              border: '1px solid #27272a',
+              color: '#fff',
+            }
+          }} />
         </Providers>
       </body>
     </html>
