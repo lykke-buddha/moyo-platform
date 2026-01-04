@@ -48,7 +48,9 @@ export const MOCK_USERS: User[] = [
         isOnline: true,
         lastSeen: Date.now(),
         createdAt: Date.now() - 10000000,
-        isLoggedIn: false
+        lastPostAt: Date.now() - 3600000, // 1 hour ago
+        isLoggedIn: false,
+        notInterested: []
     },
     {
         id: 'creator_2',
@@ -93,7 +95,9 @@ export const MOCK_USERS: User[] = [
         isOnline: false,
         lastSeen: Date.now() - 3600000,
         createdAt: Date.now() - 9000000,
-        isLoggedIn: false
+        lastPostAt: Date.now() - 86400000,
+        isLoggedIn: false,
+        notInterested: []
     },
     {
         id: 'creator_3',

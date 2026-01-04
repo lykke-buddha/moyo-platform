@@ -16,6 +16,7 @@ const SIMULATED_DELAY = 400; // ms
 
 // --- HELPERS ---
 const generateId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 export const MockService = {
     // =========================================================================
@@ -428,6 +429,282 @@ export const MockService = {
         this._createNotification(recipientId, 'new_message', `New message from ${currentUser.displayName}`, `/messages/${conversation.id}`);
 
         return newMessage;
+    },
+
+
+    // =========================================================================
+    // EXPLORE & RECOMMENDATIONS
+    // =========================================================================
+
+    /**
+     * Get personalized explore recommendations
+     */
+    async getExploreRecommendations(limit: number = 50) {
+        await delay(100);
+        const { getExploreRecommendations } = await import('./recommendationService');
+        const { DEFAULT_EXPLORE_ACTIVITY } = await import('@/types/recommendationTypes');
+
+        if (!currentUser) {
+            // Return popular creators for non-logged-in users
+            return users
+                .filter(u => u.role === 'creator' && u.isVerified)
+                .sort((a, b) => b.subscribersCount - a.subscribersCount)
+                .slice(0, limit)
+                .map(creator => ({
+                    creator,
+                    score: creator.subscribersCount,
+                    reason: 'popular' as const,
+                    reasonDetails: 'Popular creator'
+                }));
+        }
+
+        // Get user's explore activity from localStorage
+        const activityKey = `explore_activity_${currentUser.id}`;
+        let exploreActivity = DEFAULT_EXPLORE_ACTIVITY;
+        if (typeof window !== 'undefined') {
+            const stored = localStorage.getItem(activityKey);
+            if (stored) {
+                try { exploreActivity = JSON.parse(stored); } catch { }
+            }
+        }
+
+        return getExploreRecommendations(currentUser, users, posts, exploreActivity, limit);
+    },
+
+    /**
+     * Get trending creators
+     */
+    async getTrendingCreators(limit: number = 20) {
+        await delay(50);
+        const { getTrendingCreators } = await import('./recommendationService');
+        return getTrendingCreators(users, posts, limit);
+    },
+
+    /**
+     * Get rising star creators
+     */
+    async getRisingStars(limit: number = 20) {
+        await delay(50);
+        const { getRisingStars } = await import('./recommendationService');
+        return getRisingStars(users, limit);
+    },
+
+    /**
+     * Search creators with filters
+     */
+    async searchCreators(query: string, filters: any = {}) {
+        await delay(100);
+        const { searchCreators } = await import('./recommendationService');
+        return searchCreators(query, users, filters);
+    },
+
+    /**
+     * Get search suggestions
+     */
+    async getSearchSuggestions(query: string) {
+        await delay(50);
+        const { getSearchSuggestions } = await import('./recommendationService');
+
+        // Get recent searches from localStorage
+        let recentSearches: string[] = [];
+        if (typeof window !== 'undefined' && currentUser) {
+            const stored = localStorage.getItem(`recent_searches_${currentUser.id}`);
+            if (stored) {
+                try { recentSearches = JSON.parse(stored); } catch { }
+            }
+        }
+
+        return getSearchSuggestions(query, users, recentSearches);
+    },
+
+    /**
+     * Build explore sections for the UI
+     */
+    async getExploreSections() {
+        await delay(100);
+        const { buildExploreSections } = await import('./recommendationService');
+        const { DEFAULT_EXPLORE_ACTIVITY } = await import('@/types/recommendationTypes');
+
+        if (!currentUser) {
+            // Return basic sections for non-logged-in users
+            const trending = await this.getTrendingCreators(10);
+            const risingStars = await this.getRisingStars(10);
+
+            return [
+                {
+                    type: 'trending',
+                    title: 'Trending Creators 🔥',
+                    subtitle: 'Hot right now',
+                    creators: trending.map(t => ({
+                        creator: t.creator,
+                        score: t.trendingScore,
+                        reason: 'trending' as const,
+                        reasonDetails: `#${t.rank} Trending`
+                    }))
+                },
+                {
+                    type: 'rising_stars',
+                    title: 'Rising Stars ⭐',
+                    subtitle: 'New creators on the rise',
+                    creators: risingStars.map(r => ({
+                        creator: r.creator,
+                        score: r.growthRate,
+                        reason: 'rising_star' as const,
+                        reasonDetails: `${r.daysActive} days active`
+                    }))
+                }
+            ];
+        }
+
+        // Get user's explore activity
+        const activityKey = `explore_activity_${currentUser.id}`;
+        let exploreActivity = DEFAULT_EXPLORE_ACTIVITY;
+        if (typeof window !== 'undefined') {
+            const stored = localStorage.getItem(activityKey);
+            if (stored) {
+                try { exploreActivity = JSON.parse(stored); } catch { }
+            }
+        }
+
+        return buildExploreSections(currentUser, users, posts, exploreActivity);
+    },
+
+    /**
+     * Track explore activity (view, like, etc.)
+     */
+    async trackExploreActivity(action: {
+        type: 'view_creator' | 'like_post' | 'save_post' | 'search' | 'apply_filter';
+        creatorId?: string;
+        postId?: string;
+        query?: string;
+        filters?: any;
+        duration?: number;
+    }) {
+        if (!currentUser) return;
+
+        const { DEFAULT_EXPLORE_ACTIVITY } = await import('@/types/recommendationTypes');
+        const activityKey = `explore_activity_${currentUser.id}`;
+
+        // Load existing activity
+        let activity = { ...DEFAULT_EXPLORE_ACTIVITY };
+        if (typeof window !== 'undefined') {
+            const stored = localStorage.getItem(activityKey);
+            if (stored) {
+                try { activity = { ...activity, ...JSON.parse(stored) }; } catch { }
+            }
+        }
+
+        // Update activity based on action type
+        switch (action.type) {
+            case 'view_creator':
+                if (action.creatorId) {
+                    const creator = users.find(u => u.id === action.creatorId);
+                    if (creator) {
+                        // Add to viewed creators
+                        activity.viewedCreators.push({
+                            creatorId: action.creatorId,
+                            viewedAt: Date.now(),
+                            duration: action.duration || 0,
+                            actions: ['viewed_posts']
+                        });
+                        // Update category affinity
+                        const currentAffinity = activity.categoryAffinities[creator.category] || 0;
+                        activity.categoryAffinities[creator.category] = Math.min(1, currentAffinity + 0.1);
+                        // Add to recently viewed
+                        activity.recentlyViewedCreatorIds = [
+                            action.creatorId,
+                            ...activity.recentlyViewedCreatorIds.filter(id => id !== action.creatorId)
+                        ].slice(0, 50);
+                    }
+                }
+                break;
+
+            case 'like_post':
+                if (action.postId) {
+                    activity.likedContent.push(action.postId);
+                    // Boost category affinity
+                    const post = posts.find(p => p.id === action.postId);
+                    if (post) {
+                        const currentAffinity = activity.categoryAffinities[post.category] || 0;
+                        activity.categoryAffinities[post.category] = Math.min(1, currentAffinity + 0.15);
+                    }
+                }
+                break;
+
+            case 'save_post':
+                if (action.postId) {
+                    activity.savedContent.push(action.postId);
+                }
+                break;
+
+            case 'search':
+                if (action.query) {
+                    activity.searchHistory.unshift({ query: action.query, timestamp: Date.now() });
+                    activity.searchHistory = activity.searchHistory.slice(0, 20);
+                    // Also save to recent searches
+                    if (typeof window !== 'undefined') {
+                        const recentKey = `recent_searches_${currentUser.id}`;
+                        const recent = [action.query, ...activity.searchHistory.map(s => s.query)];
+                        localStorage.setItem(recentKey, JSON.stringify([...new Set(recent)].slice(0, 10)));
+                    }
+                }
+                break;
+
+            case 'apply_filter':
+                if (action.filters) {
+                    activity.appliedFilters.unshift({ filters: action.filters, timestamp: Date.now() });
+                    activity.appliedFilters = activity.appliedFilters.slice(0, 10);
+                }
+                break;
+        }
+
+        activity.updatedAt = Date.now();
+
+        // Save to localStorage
+        if (typeof window !== 'undefined') {
+            localStorage.setItem(activityKey, JSON.stringify(activity));
+        }
+    },
+
+    /**
+     * Mark creator as "Not Interested"
+     */
+    async markNotInterested(creatorId: string) {
+        if (!currentUser) return;
+
+        // Update user's notInterested list
+        if (!currentUser.notInterested) {
+            currentUser.notInterested = [];
+        }
+        if (!currentUser.notInterested.includes(creatorId)) {
+            currentUser.notInterested.push(creatorId);
+            this._updateUserInStore(currentUser);
+        }
+
+        // Also update explore activity
+        const { DEFAULT_EXPLORE_ACTIVITY } = await import('@/types/recommendationTypes');
+        const activityKey = `explore_activity_${currentUser.id}`;
+
+        let activity = { ...DEFAULT_EXPLORE_ACTIVITY };
+        if (typeof window !== 'undefined') {
+            const stored = localStorage.getItem(activityKey);
+            if (stored) {
+                try { activity = { ...activity, ...JSON.parse(stored) }; } catch { }
+            }
+
+            if (!activity.notInterestedCreators.includes(creatorId)) {
+                activity.notInterestedCreators.push(creatorId);
+                localStorage.setItem(activityKey, JSON.stringify(activity));
+            }
+        }
+    },
+
+    /**
+     * Get all creators (for explore grid)
+     */
+    async getAllCreators() {
+        await delay(50);
+        return users.filter(u => u.role === 'creator');
     },
 
 

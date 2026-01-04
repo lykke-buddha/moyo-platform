@@ -94,7 +94,11 @@ export interface User {
     lastSeen: number; // timestamp
     createdAt: number; // timestamp
     creatorSince?: number; // timestamp
+    lastPostAt?: number; // timestamp of last post (for freshness scoring)
     isLoggedIn: boolean;
+
+    // Explore & Personalization
+    notInterested?: string[]; // Creator IDs user marked as "not interested"
 }
 
 export interface AuthResponse {
