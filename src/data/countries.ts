@@ -1,0 +1,63 @@
+export interface Country {
+    name: string;
+    code: string;
+    flag: string;
+    phoneCode: string;
+    currency: string;
+}
+
+export const africanCountries: Country[] = [
+    { name: "Nigeria", code: "NG", flag: "🇳🇬", phoneCode: "+234", currency: "NGN" },
+    { name: "South Africa", code: "ZA", flag: "🇿🇦", phoneCode: "+27", currency: "ZAR" },
+    { name: "Kenya", code: "KE", flag: "🇰🇪", phoneCode: "+254", currency: "KES" },
+    { name: "Ghana", code: "GH", flag: "🇬🇭", phoneCode: "+233", currency: "GHS" },
+    { name: "Egypt", code: "EG", flag: "🇪🇬", phoneCode: "+20", currency: "EGP" },
+    { name: "Ethiopia", code: "ET", flag: "🇪🇹", phoneCode: "+251", currency: "ETB" },
+    { name: "Tanzania", code: "TZ", flag: "🇹🇿", phoneCode: "+255", currency: "TZS" },
+    { name: "Uganda", code: "UG", flag: "🇺🇬", phoneCode: "+256", currency: "UGX" },
+    { name: "Algeria", code: "DZ", flag: "🇩🇿", phoneCode: "+213", currency: "DZD" },
+    { name: "Morocco", code: "MA", flag: "🇲🇦", phoneCode: "+212", currency: "MAD" },
+    { name: "Angola", code: "AO", flag: "🇦🇴", phoneCode: "+244", currency: "AOA" },
+    { name: "Mozambique", code: "MZ", flag: "🇲🇿", phoneCode: "+258", currency: "MZN" },
+    { name: "Ivory Coast", code: "CI", flag: "🇨🇮", phoneCode: "+225", currency: "XOF" },
+    { name: "Cameroon", code: "CM", flag: "🇨🇲", phoneCode: "+237", currency: "XAF" },
+    { name: "Madagascar", code: "MG", flag: "🇲🇬", phoneCode: "+261", currency: "MGA" },
+    { name: "Zambia", code: "ZM", flag: "🇿🇲", phoneCode: "+260", currency: "ZMW" },
+    { name: "Senegal", code: "SN", flag: "🇸🇳", phoneCode: "+221", currency: "XOF" },
+    { name: "Zimbabwe", code: "ZW", flag: "🇿🇼", phoneCode: "+263", currency: "USD" },
+    { name: "Rwanda", code: "RW", flag: "🇷🇼", phoneCode: "+250", currency: "RWF" },
+    { name: "Tunisia", code: "TN", flag: "🇹🇳", phoneCode: "+216", currency: "TND" },
+    { name: "Guinea", code: "GN", flag: "🇬🇳", phoneCode: "+224", currency: "GNF" },
+    { name: "Benin", code: "BJ", flag: "🇧🇯", phoneCode: "+229", currency: "XOF" },
+    { name: "Burundi", code: "BI", flag: "🇧🇮", phoneCode: "+257", currency: "BIF" },
+    { name: "South Sudan", code: "SS", flag: "🇸🇸", phoneCode: "+211", currency: "SSP" },
+    { name: "Togo", code: "TG", flag: "🇹🇬", phoneCode: "+228", currency: "XOF" },
+    { name: "Sierra Leone", code: "SL", flag: "🇸🇱", phoneCode: "+232", currency: "SLE" },
+    { name: "Libya", code: "LY", flag: "🇱🇾", phoneCode: "+218", currency: "LYD" },
+    { name: "Congo (Republic)", code: "CG", flag: "🇨🇬", phoneCode: "+242", currency: "XAF" },
+    { name: "Liberia", code: "LR", flag: "🇱🇷", phoneCode: "+231", currency: "LRD" },
+    { name: "Central African Republic", code: "CF", flag: "🇨🇫", phoneCode: "+236", currency: "XAF" },
+    { name: "Mauritania", code: "MR", flag: "🇲🇷", phoneCode: "+222", currency: "MRU" },
+    { name: "Eritrea", code: "ER", flag: "🇪🇷", phoneCode: "+291", currency: "ERN" },
+    { name: "Namibia", code: "NA", flag: "🇳🇦", phoneCode: "+264", currency: "NAD" },
+    { name: "Gambia", code: "GM", flag: "🇬🇲", phoneCode: "+220", currency: "GMD" },
+    { name: "Botswana", code: "BW", flag: "🇧🇼", phoneCode: "+267", currency: "BWP" },
+    { name: "Gabon", code: "GA", flag: "🇬🇦", phoneCode: "+241", currency: "XAF" },
+    { name: "Lesotho", code: "LS", flag: "🇱🇸", phoneCode: "+266", currency: "LSL" },
+    { name: "Guinea-Bissau", code: "GW", flag: "🇬🇼", phoneCode: "+245", currency: "XOF" },
+    { name: "Equatorial Guinea", code: "GQ", flag: "🇬🇶", phoneCode: "+240", currency: "XAF" },
+    { name: "Mauritius", code: "MU", flag: "🇲🇺", phoneCode: "+230", currency: "MUR" },
+    { name: "Eswatini", code: "SZ", flag: "🇸🇿", phoneCode: "+268", currency: "SZL" },
+    { name: "Djibouti", code: "DJ", flag: "🇩🇯", phoneCode: "+253", currency: "DJF" },
+    { name: "Comoros", code: "KM", flag: "🇰🇲", phoneCode: "+269", currency: "KMF" },
+    { name: "Cabo Verde", code: "CV", flag: "🇨🇻", phoneCode: "+238", currency: "CVE" },
+    { name: "São Tomé and Príncipe", code: "ST", flag: "🇸🇹", phoneCode: "+239", currency: "STN" },
+    { name: "Seychelles", code: "SC", flag: "🇸🇨", phoneCode: "+248", currency: "SCR" },
+    { name: "Burkina Faso", code: "BF", flag: "🇧🇫", phoneCode: "+226", currency: "XOF" },
+    { name: "Mali", code: "ML", flag: "🇲🇱", phoneCode: "+223", currency: "XOF" },
+    { name: "Malawi", code: "MW", flag: "🇲🇼", phoneCode: "+265", currency: "MWK" },
+    { name: "Niger", code: "NE", flag: "🇳🇪", phoneCode: "+227", currency: "XOF" },
+    { name: "Chad", code: "TD", flag: "🇹🇩", phoneCode: "+235", currency: "XAF" },
+    { name: "Somalia", code: "SO", flag: "🇸🇴", phoneCode: "+252", currency: "SOS" },
+    { name: "Democratic Republic of the Congo", code: "CD", flag: "🇨🇩", phoneCode: "+243", currency: "CDF" }
+].sort((a, b) => a.name.localeCompare(b.name));

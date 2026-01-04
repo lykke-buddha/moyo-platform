@@ -1,27 +1,28 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { Loader2, Image as ImageIcon, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
+import ProtectedRoute from '@/components/auth/ProtectedRoute';
 
 export default function CreatePostPage() {
+    return (
+        <ProtectedRoute allowedRoles={['creator']}>
+            <CreatePostContent />
+        </ProtectedRoute>
+    );
+}
+
+function CreatePostContent() {
     const router = useRouter();
-    const { user, isLoading } = useAuth();
+    const { user } = useAuth();
     const [content, setContent] = useState('');
     const [imageFile, setImageFile] = useState<File | null>(null);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
     const [isPosting, setIsPosting] = useState(false);
-
-    useEffect(() => {
-        if (!isLoading && !user) {
-            toast.error("You must be logged in to create a post");
-            router.push('/');
-        }
-    }, [user, isLoading, router]);
 
     const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0]) {
@@ -42,73 +43,21 @@ export default function CreatePostPage() {
             toast.error("Please add some text or an image");
             return;
         }
-        if (!user) {
-            toast.error("You must be logged in to post");
-            return;
-        }
 
         setIsPosting(true);
         const toastId = toast.loading("Creating post...");
 
         try {
-            let imageUrl = null;
+            // MOCK POST CREATION
+            await new Promise(resolve => setTimeout(resolve, 1500));
 
-            // 1. Upload Image if exists
-            if (imageFile) {
-                const fileExt = imageFile.name.split('.').pop();
-                const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-                const filePath = `${fileName}`;
-
-                console.log('Attempting upload to posts bucket:', filePath);
-
-                const { error: uploadError } = await supabase.storage
-                    .from('posts')
-                    .upload(filePath, imageFile);
-
-                if (uploadError) {
-                    console.error('Upload Error:', uploadError);
-                    throw new Error(`Image upload failed: ${uploadError.message}`);
-                }
-
-                const { data: { publicUrl } } = supabase.storage
-                    .from('posts')
-                    .getPublicUrl(filePath);
-
-                imageUrl = publicUrl;
-            }
-
-            // 2. Insert Post
-            console.log('Inserting post record...');
-            const { error: insertError } = await supabase
-                .from('posts')
-                .insert({
-                    user_id: user.id,
-                    content: content,
-                    image_url: imageUrl,
-                    is_premium: false, // Default for now
-                    price: 0
-                });
-
-            if (insertError) {
-                console.error('Insert Error:', insertError);
-                throw new Error(`Database insert failed: ${insertError.message}`);
-            }
-
-            toast.success("Post created successfully!", { id: toastId });
+            toast.success("Post created successfully! (Mock)", { id: toastId });
             router.push('/');
             router.refresh();
 
         } catch (error: any) {
             console.error('Post Creation Error:', error);
-            let message = error.message || "Failed to create post";
-
-            if (message.includes('foreign key constraint')) {
-                message = "Your user profile is missing. Please go to Settings > Profile to set it up first.";
-            } else if (message.includes('policy')) {
-                message = "Permission denied. You may not be allowed to post.";
-            }
-
-            toast.error(message, { id: toastId });
+            toast.error("Failed to create post", { id: toastId });
         } finally {
             setIsPosting(false);
         }
@@ -121,8 +70,8 @@ export default function CreatePostPage() {
             <div className="bg-zinc-900/50 border border-zinc-800 rounded-xl p-6">
                 <div className="flex gap-4 mb-6">
                     <div className="w-10 h-10 rounded-full bg-zinc-800 flex-shrink-0 relative overflow-hidden">
-                        {user?.user_metadata?.avatar_url ? (
-                            <Image src={user.user_metadata.avatar_url} fill className="object-cover" alt="User" />
+                        {user?.avatar ? (
+                            <Image src={user.avatar} fill className="object-cover" alt="User" />
                         ) : (
                             <div className="w-full h-full bg-zinc-700" />
                         )}
@@ -164,7 +113,6 @@ export default function CreatePostPage() {
                             accept="image/*"
                             onChange={handleImageSelect}
                         />
-                        {/* Video/Smile buttons can be placeholders for now */}
                     </div>
 
                     <button

@@ -16,8 +16,7 @@ export default function ExplorePage() {
     // Filter Posts based on search
     const filteredPosts = EXPLORE_POSTS.filter(post => {
         if (!searchQuery) return true;
-        // Simple mock search: filter by randomly satisfying match or if type matches
-        return post.type.includes(searchQuery.toLowerCase()) || Math.random() > 0.5; // Dummy search logic for visuals
+        return post.type.includes(searchQuery.toLowerCase());
     });
 
     // Mock User Search (using unique authors from POSTS)

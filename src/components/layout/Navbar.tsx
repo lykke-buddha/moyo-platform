@@ -1,20 +1,11 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import LoginModal from '@/components/modals/LoginModal';
 import Image from 'next/image';
 
 export default function Navbar() {
-    const { isLoggedIn, user, logout } = useAuth();
-    const [showLoginModal, setShowLoginModal] = useState(false);
-    const [isLoginMode, setIsLoginMode] = useState(true);
-
-    const handleOpenAuth = (loginMode: boolean) => {
-        setIsLoginMode(loginMode);
-        setShowLoginModal(true);
-    };
+    const { isLoggedIn, user, logout, openLoginModal } = useAuth();
 
     return (
         <>
@@ -43,18 +34,18 @@ export default function Navbar() {
 
                         <div className="flex items-center gap-4">
                             <div className="hidden md:flex flex-col items-end">
-                                <span className="text-sm font-semibold text-white">{user.user_metadata?.full_name || user.email?.split('@')[0] || 'User'}</span>
-                                <span className="text-xs text-zinc-500">@{user.user_metadata?.username || user.email?.split('@')[0] || 'user'}</span>
+                                <span className="text-sm font-semibold text-white">{user.displayName || user.email.split('@')[0]}</span>
+                                <span className="text-xs text-zinc-500">@{user.username || 'user'}</span>
                             </div>
                             <button onClick={logout} className="text-xs text-zinc-400 hover:text-white transition-colors">
                                 Logout
                             </button>
                             <Link href="/profile">
-                                {user.user_metadata?.avatar_url ? (
-                                    <Image src={user.user_metadata.avatar_url} alt="Profile" width={36} height={36} className="rounded-full border border-white/20 hover:border-amber-500 transition-colors object-cover" />
+                                {user.avatar ? (
+                                    <Image src={user.avatar} alt="Profile" width={36} height={36} className="rounded-full border border-white/20 hover:border-amber-500 transition-colors object-cover" />
                                 ) : (
                                     <div className="w-9 h-9 rounded-full bg-zinc-800 border border-white/20 hover:border-amber-500 transition-colors flex items-center justify-center">
-                                        <span className="text-xs font-bold text-amber-500">{user.email?.[0].toUpperCase()}</span>
+                                        <span className="text-xs font-bold text-amber-500">{user.email[0].toUpperCase()}</span>
                                     </div>
                                 )}
                             </Link>
@@ -62,13 +53,13 @@ export default function Navbar() {
                     ) : (
                         <>
                             <button
-                                onClick={() => handleOpenAuth(true)}
+                                onClick={openLoginModal}
                                 className="text-sm font-medium text-white/80 hover:text-amber-500 transition-colors"
                             >
                                 Login
                             </button>
                             <button
-                                onClick={() => handleOpenAuth(false)}
+                                onClick={openLoginModal}
                                 className="bg-amber-500 text-black px-4 py-2 rounded-full text-sm font-bold hover:bg-amber-400 transition-colors shadow-lg shadow-amber-500/20"
                             >
                                 Join Now
@@ -77,8 +68,6 @@ export default function Navbar() {
                     )}
                 </div>
             </nav>
-            {/* We pass a specific prop or context if we want to default to signup vs login, but for now strict boolean control of modal internal state is not exposed, just defaulting to login for both triggers is fine for this iteration, or we can update LoginModal. */}
-            <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
         </>
     );
 }

@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 import { Providers } from '@/components/providers/Providers';
+import AgeVerificationModal from "@/components/modals/AgeVerificationModal";
 
 export default function RootLayout({
   children,
@@ -31,6 +32,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <Providers>
+          <AgeVerificationModal />
           <Sidebar />
 
           <main className="flex-1 h-full overflow-y-auto no-scrollbar relative w-full border-r border-zinc-800/50 bg-zinc-950">

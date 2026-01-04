@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, Camera, User, AtSign, Loader2 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { MockService } from '@/services/mockService'; // Using MockService as AuthContext is wired to it
 
 // Define the shape of our profile data
 interface ProfileData {
@@ -18,8 +18,8 @@ interface ProfileData {
 }
 
 export default function ProfileSettingsPage() {
-    const router = useRouter(); // Keeping router for consistency, though unused in snippet
-    const { user, isLoading: authLoading } = useAuth();
+    const router = useRouter();
+    const { user, isLoading: authLoading, updateProfile } = useAuth();
     const [isSaving, setIsSaving] = useState(false);
     const [isLoadingData, setIsLoadingData] = useState(true);
 
@@ -37,61 +37,20 @@ export default function ProfileSettingsPage() {
 
         // processing logic if not logged in
         if (!user) {
-            // If this page is protected, we should redirect.
-            // For now, let's just stop loading so the user sees *something* or is redirected.
-            // In a real app: router.push('/login');
             setIsLoadingData(false);
             return;
         }
 
-        async function loadProfile() {
-            try {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('full_name, username, bio, avatar_url')
-                    .eq('id', user!.id)
-                    .maybeSingle();
+        // Load data from current user
+        setFormData({
+            full_name: user.displayName || '',
+            username: user.username || '',
+            bio: user.bio || '',
+            website: '',
+            avatar_url: user.avatar || ''
+        });
+        setIsLoadingData(false);
 
-                if (data) {
-                    setFormData({
-                        full_name: data.full_name || user!.user_metadata?.full_name || '',
-                        username: data.username || user!.user_metadata?.username || user!.email?.split('@')[0] || '',
-                        bio: data.bio || '',
-                        website: '',
-                        avatar_url: data.avatar_url || user!.user_metadata?.avatar_url || ''
-                    });
-                } else {
-                    // No profile found - use Auth Defaults
-                    const defaults = {
-                        full_name: user!.user_metadata?.full_name || user!.email?.split('@')[0] || '',
-                        username: user!.user_metadata?.username || user!.email?.split('@')[0] || '',
-                        avatar_url: user!.user_metadata?.avatar_url || ''
-                    };
-
-                    setFormData({
-                        ...defaults,
-                        bio: '',
-                        website: ''
-                    });
-
-                    // Auto-create/Sync the profile row so other parts of the app (like Create Post) work immediately
-                    // providing we have at least an ID.
-                    await supabase.from('profiles').upsert({
-                        id: user!.id,
-                        full_name: defaults.full_name,
-                        username: defaults.username,
-                        avatar_url: defaults.avatar_url,
-                        updated_at: new Date().toISOString()
-                    }, { onConflict: 'id' });
-                }
-            } catch (err) {
-                console.error('Unexpected error loading profile:', err);
-            } finally {
-                setIsLoadingData(false);
-            }
-        }
-
-        loadProfile();
     }, [user, authLoading]);
 
 
@@ -101,30 +60,14 @@ export default function ProfileSettingsPage() {
 
         setIsSaving(true);
         try {
-            // 1. Update public profile table (UPSERT to handle missing rows)
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .upsert({
-                    id: user.id, // Required for upsert
-                    full_name: formData.full_name,
-                    username: formData.username,
-                    bio: formData.bio,
-                    avatar_url: formData.avatar_url,
-                    updated_at: new Date().toISOString(),
-                }, { onConflict: 'id' });
-
-            if (profileError) throw profileError;
-
-            // 2. Update auth metadata (so Navbar updates immediately)
-            const { error: authError } = await supabase.auth.updateUser({
-                data: {
-                    full_name: formData.full_name,
-                    username: formData.username,
-                    avatar_url: formData.avatar_url
-                }
+            // Update using AuthContext / MockService
+            await updateProfile({
+                displayName: formData.full_name,
+                username: formData.username,
+                bio: formData.bio,
+                avatar: formData.avatar_url
+                // website is not in User type yet
             });
-
-            if (authError) throw authError;
 
             alert('Profile updated successfully!');
             router.refresh();
@@ -145,36 +88,17 @@ export default function ProfileSettingsPage() {
         if (!e.target.files || e.target.files.length === 0) return;
 
         const file = e.target.files[0];
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${user?.id}-${Math.random()}.${fileExt}`;
-        const filePath = `${fileName}`;
+        // In Mock mode, we can't really upload unless we mock it or use a public URL.
+        // For now, let's use a dummy URL or object URL.
+        const objectUrl = URL.createObjectURL(file);
 
         setIsSaving(true);
         try {
-            const { error: uploadError } = await supabase.storage
-                .from('avatars')
-                .upload(filePath, file);
+            // Mock upload by just setting the URL
+            setFormData(prev => ({ ...prev, avatar_url: objectUrl }));
 
-            if (uploadError) throw uploadError;
-
-            const { data: { publicUrl } } = supabase.storage
-                .from('avatars')
-                .getPublicUrl(filePath);
-
-            setFormData(prev => ({ ...prev, avatar_url: publicUrl }));
-
-            // Auto-save the new avatar immediately or just let user click save?
-            // Let's just update the specific field in DB immediately for better UX
-            const { error: updateError } = await supabase
-                .from('profiles')
-                .update({ avatar_url: publicUrl })
-                .eq('id', user?.id);
-
-            if (updateError) throw updateError;
-
-            // Also update auth metadata
-            await supabase.auth.updateUser({
-                data: { avatar_url: publicUrl }
+            await updateProfile({
+                avatar: objectUrl
             });
 
             router.refresh();
@@ -234,7 +158,7 @@ export default function ProfileSettingsPage() {
                             type="file"
                             id="avatar-upload"
                             hidden
-                            accept="image/*"
+                            accept="image/*" // Ensure file type is image
                             onChange={handleImageUpload}
                         />
                     </div>

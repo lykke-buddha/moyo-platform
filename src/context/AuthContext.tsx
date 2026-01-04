@@ -1,16 +1,17 @@
 'use client';
 
 import { createContext, useContext, useState, useEffect } from 'react';
-import { supabase } from '@/lib/supabase';
-import { User } from '@supabase/supabase-js';
+import { User, UserRole } from '@/types';
+import { MockService } from '@/services/mockService';
 
 type AuthContextType = {
     user: User | null;
     isLoggedIn: boolean;
     isLoading: boolean;
-    login: (email: string, password?: string) => Promise<void>;
-    signup: (email: string, password?: string) => Promise<void>;
+    login: (email: string, password?: string, rememberMe?: boolean) => Promise<void>;
+    signup: (email: string, password?: string, username?: string, role?: UserRole, dob?: { day: number, month: number, year: number }, countryData?: { name: string, code: string, flag: string }) => Promise<void>;
     logout: () => Promise<void>;
+    updateProfile: (updates: Partial<User>) => Promise<void>;
     isLoginModalOpen: boolean;
     openLoginModal: () => void;
     closeLoginModal: () => void;
@@ -23,6 +24,7 @@ const AuthContext = createContext<AuthContextType>({
     login: async () => { },
     signup: async () => { },
     logout: async () => { },
+    updateProfile: async () => { },
     isLoginModalOpen: false,
     openLoginModal: () => { },
     closeLoginModal: () => { },
@@ -37,60 +39,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const closeLoginModal = () => setIsLoginModalOpen(false);
 
     useEffect(() => {
-        // Check active session
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setUser(session?.user ?? null);
-            setIsLoading(false);
-        });
+        // Check active session on mount
+        const initAuth = async () => {
+            try {
+                const sessionUser = await MockService.checkSession();
+                setUser(sessionUser);
+            } catch (error) {
+                console.error("Session check failed", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-        // Listen for changes
-        const {
-            data: { subscription },
-        } = supabase.auth.onAuthStateChange((_event, session) => {
-            setUser(session?.user ?? null);
-            setIsLoading(false);
-        });
-
-        return () => subscription.unsubscribe();
+        initAuth();
     }, []);
 
-    const login = async (email: string, password?: string) => {
-        if (password) {
-            const { error } = await supabase.auth.signInWithPassword({
-                email,
-                password,
-            });
-            if (error) throw error;
-        } else {
-            const { error } = await supabase.auth.signInWithOtp({
-                email,
-                options: {
-                    emailRedirectTo: window.location.origin,
-                },
-            });
-            if (error) throw error;
-        }
+    const login = async (email: string, password?: string, rememberMe: boolean = false) => {
+        if (!password) throw new Error("Password is required for login");
+        const response = await MockService.login(email, password, rememberMe);
+        setUser(response.user);
     };
 
-    const signup = async (email: string, password?: string) => {
-        if (password) {
-            const { error } = await supabase.auth.signUp({
-                email,
-                password,
-            });
-            if (error) throw error;
-        } else {
-            // Fallback to OTP if no password provided (unlikely in this UI)
-            const { error } = await supabase.auth.signInWithOtp({ email });
-            if (error) throw error;
-        }
+    const signup = async (email: string, password?: string, username?: string, role: UserRole = 'fan', dob?: { day: number, month: number, year: number }, countryData?: { name: string, code: string, flag: string }) => {
+        if (!password || !username) throw new Error("Missing required signup fields");
+        if (!dob) throw new Error("Date of birth is required");
+        const response = await MockService.signup(email, password, username, role, dob, countryData);
+        setUser(response.user);
     }
 
     const logout = async () => {
-        await supabase.auth.signOut();
+        await MockService.logout();
         setUser(null);
-        localStorage.removeItem('moyo_user');
     };
+
+    const updateProfile = async (updates: Partial<User>) => {
+        const updatedUser = await MockService.updateProfile(updates);
+        setUser(updatedUser);
+    }
 
     return (
         <AuthContext.Provider value={{
@@ -99,6 +84,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             login,
             signup,
             logout,
+            updateProfile,
             isLoading,
             isLoginModalOpen,
             openLoginModal,
