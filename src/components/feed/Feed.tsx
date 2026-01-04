@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { STORIES, CURRENT_USER } from '@/lib/mockData'; // Keep STORIES mock for now
+import { STORIES, POSTS, CURRENT_USER } from '@/lib/mockData';
 import { useAuth } from '@/context/AuthContext';
 import LoginModal from '@/components/modals/LoginModal';
 import SubscriptionModal from '@/components/modals/SubscriptionModal';
@@ -60,11 +60,62 @@ export default function Feed() {
 
             if (error) {
                 console.error('Error fetching posts:', error);
+                const mappedPosts = POSTS.map(p => ({
+                    id: p.id,
+                    content: p.content.text,
+                    image_url: p.content.image,
+                    created_at: new Date().toISOString(), // Mock data doesn't have ISO date
+                    is_premium: p.meta.isPremium,
+                    price: p.lock?.price ? parseInt(p.lock!.price.replace(/\D/g, '')) : 0,
+                    profiles: {
+                        full_name: p.author.name,
+                        username: p.author.handle.replace('@', ''),
+                        avatar_url: p.author.avatar,
+                        is_verified: p.author.isVerified
+                    },
+                    user_id: 'mock-user'
+                }));
+                setPosts(mappedPosts);
+            } else if (!data || data.length === 0) {
+                // Fallback to dummy data if DB is empty
+                const mappedPosts = POSTS.map(p => ({
+                    id: p.id,
+                    content: p.content.text,
+                    image_url: p.content.image,
+                    created_at: new Date().toISOString(),
+                    is_premium: p.meta.isPremium,
+                    price: p.lock?.price ? parseInt(p.lock!.price.replace(/\D/g, '')) : 0,
+                    profiles: {
+                        full_name: p.author.name,
+                        username: p.author.handle.replace('@', ''),
+                        avatar_url: p.author.avatar,
+                        is_verified: p.author.isVerified
+                    },
+                    user_id: 'mock-user'
+                }));
+                setPosts(mappedPosts);
             } else {
-                setPosts(data || []);
+                setPosts(data);
             }
         } catch (err) {
             console.error('Unexpected error:', err);
+            // Fallback
+            const mappedPosts = POSTS.map(p => ({
+                id: p.id,
+                content: p.content.text,
+                image_url: p.content.image,
+                created_at: new Date().toISOString(),
+                is_premium: p.meta.isPremium,
+                price: p.lock?.price ? parseInt(p.lock!.price.replace(/\D/g, '')) : 0,
+                profiles: {
+                    full_name: p.author.name,
+                    username: p.author.handle.replace('@', ''),
+                    avatar_url: p.author.avatar,
+                    is_verified: p.author.isVerified
+                },
+                user_id: 'mock-user'
+            }));
+            setPosts(mappedPosts);
         } finally {
             setIsLoadingPosts(false);
         }
@@ -116,7 +167,6 @@ export default function Feed() {
                 alert(`You are already subscribed to ${creatorName}!`);
                 return;
             }
-            // Explicitly ensure isOpen is true
             setSubModalData({ isOpen: true, creator: creatorName, price });
         });
     };
@@ -133,7 +183,6 @@ export default function Feed() {
         } else {
             setSubscribedCreators(prev => ({ ...prev, [subModalData.creator]: true }));
         }
-        // Fix: Ensure we close the modal properly
         setSubModalData(prev => ({ ...prev, isOpen: false }));
     };
 

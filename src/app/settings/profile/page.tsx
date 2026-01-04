@@ -61,13 +61,28 @@ export default function ProfileSettingsPage() {
                         avatar_url: data.avatar_url || user!.user_metadata?.avatar_url || ''
                     });
                 } else {
-                    setFormData({
-                        full_name: user!.user_metadata?.full_name || '',
+                    // No profile found - use Auth Defaults
+                    const defaults = {
+                        full_name: user!.user_metadata?.full_name || user!.email?.split('@')[0] || '',
                         username: user!.user_metadata?.username || user!.email?.split('@')[0] || '',
-                        bio: '',
-                        website: '',
                         avatar_url: user!.user_metadata?.avatar_url || ''
+                    };
+
+                    setFormData({
+                        ...defaults,
+                        bio: '',
+                        website: ''
                     });
+
+                    // Auto-create/Sync the profile row so other parts of the app (like Create Post) work immediately
+                    // providing we have at least an ID.
+                    await supabase.from('profiles').upsert({
+                        id: user!.id,
+                        full_name: defaults.full_name,
+                        username: defaults.username,
+                        avatar_url: defaults.avatar_url,
+                        updated_at: new Date().toISOString()
+                    }, { onConflict: 'id' });
                 }
             } catch (err) {
                 console.error('Unexpected error loading profile:', err);

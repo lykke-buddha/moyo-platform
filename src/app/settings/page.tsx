@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import {
-    User, Lock, CreditCard, Bell, Moon, Globe, ChevronRight, LogOut
+    User, Lock, CreditCard, Bell, Moon, Globe, ChevronRight, LogOut, Sparkles
 } from 'lucide-react';
 
 export default function SettingsPage() {
@@ -18,6 +18,7 @@ export default function SettingsPage() {
 
     const accountItems = [
         { icon: User, label: 'Personal Information', path: '/settings/profile', value: '' },
+        { icon: Sparkles, label: 'Become a Creator', path: '/become-creator', value: 'Start Earning' },
         { icon: Lock, label: 'Password and Security', path: '/settings/security', value: '' },
         { icon: CreditCard, label: 'Payment Methods', path: '/settings/payouts', value: 'Visa ending 4242' },
     ];

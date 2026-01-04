@@ -31,8 +31,8 @@ export default function Sidebar() {
             { icon: Bell, label: 'Notifications', path: '/notifications', badge: true },
             { icon: MessageCircle, label: 'Messages', path: '/messages' },
             { icon: CreditCard, label: 'Payouts', path: '/payouts' },
+            { icon: Settings2, label: 'Settings', path: '/settings' },
         ] : []),
-        { icon: Settings2, label: 'Settings', path: '/settings' },
     ];
 
     return (
