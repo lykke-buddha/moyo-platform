@@ -2,67 +2,111 @@
 
 import { useState } from 'react';
 import { X, CreditCard, CheckCircle2, PawPrint, Smartphone, Loader2, ShieldCheck } from 'lucide-react';
+import { useSubscription } from '@/hooks/useSubscription';
 
 interface SubscriptionModalProps {
     isOpen: boolean;
     onClose: () => void;
     creatorName: string;
+    creatorId: string;
     price: string;
     onSuccess: () => void;
 }
 
-export default function SubscriptionModal({ isOpen, onClose, creatorName, price, onSuccess }: SubscriptionModalProps) {
+export default function SubscriptionModal({ isOpen, onClose, creatorName, creatorId, price, onSuccess }: SubscriptionModalProps) {
     const [paymentMethod, setPaymentMethod] = useState<'card' | 'paws' | 'transfer'>('card');
     const [phoneNumber, setPhoneNumber] = useState('');
     const [phoneNumberError, setPhoneNumberError] = useState('');
     const [processing, setProcessing] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [error, setError] = useState('');
+
+    const { subscribe } = useSubscription(creatorId);
 
     if (!isOpen) return null;
 
-    const handlePayment = () => {
+    // Parse price from string (e.g., "R2,500" -> 2500)
+    const parsePrice = (priceStr: string): number => {
+        const cleanedPrice = priceStr.replace(/[^0-9]/g, '');
+        return parseInt(cleanedPrice, 10) || 0;
+    };
+
+    const handlePayment = async () => {
+        setError('');
         setPhoneNumberError('');
 
         if (paymentMethod === 'paws') {
             if (!phoneNumber) {
-                setPhoneNumberError('Phone number is required for Paws Pay.');
+                setPhoneNumberError('Phone number is required for Mobile Money.');
                 return;
             }
-            // Basic Malawi phone validation (simple check for now)
-            if (!phoneNumber.startsWith('+265') && !phoneNumber.startsWith('0')) {
-                setPhoneNumberError('Please enter a valid phone number (e.g., 099... or +265...)');
+            if (!phoneNumber.startsWith('+27') && !phoneNumber.startsWith('0')) {
+                setPhoneNumberError('Please enter a valid South African phone number');
                 return;
             }
         }
 
         setProcessing(true);
-        // Simulate payment delay
-        setTimeout(() => {
-            setProcessing(false);
-            setIsSuccess(true);
 
-            // Wait a moment to show success message, then close
-            setTimeout(() => {
-                onSuccess();
-                setIsSuccess(false); // Reset for next time
-                setPhoneNumber(''); // Reset form
-            }, 1000);
-        }, 1500);
+        try {
+            // Simulate payment processing delay
+            await new Promise(resolve => setTimeout(resolve, 1500));
+
+            // Call Supabase subscription
+            const numericPrice = parsePrice(price);
+            const result = await subscribe(numericPrice);
+
+            if (result.success) {
+                setProcessing(false);
+                setIsSuccess(true);
+
+                // Wait a moment to show success message, then close
+                setTimeout(() => {
+                    onSuccess();
+                    setIsSuccess(false);
+                    setPhoneNumber('');
+                }, 1500);
+            } else {
+                setProcessing(false);
+                setError(result.error || 'Subscription failed. Please try again.');
+            }
+        } catch (err) {
+            setProcessing(false);
+            setError('An error occurred. Please try again.');
+            console.error('Payment error:', err);
+        }
+    };
+
+    const handleClose = () => {
+        if (!processing && !isSuccess) {
+            setError('');
+            setPhoneNumberError('');
+            onClose();
+        }
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 cursor-default">
+        <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200 cursor-default"
+            onClick={handleClose}
+        >
             <div onClick={(e) => e.stopPropagation()} className="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl relative">
-                {!isSuccess && (
-                    <button onClick={onClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors z-10">
+                {!isSuccess && !processing && (
+                    <button onClick={handleClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors z-10">
                         <X className="w-5 h-5" />
                     </button>
                 )}
 
                 {/* Header */}
                 <div className="bg-zinc-950 p-6 border-b border-zinc-800/50 text-center">
-                    <h3 className="text-white font-bold text-lg mb-1">{isSuccess ? 'Payment Successful!' : `Subscribe to ${creatorName}`}</h3>
-                    {!isSuccess && <p className="text-amber-500 font-semibold text-xl">{price}<span className="text-zinc-500 text-sm font-normal"> / month</span></p>}
+                    <h3 className="text-white font-bold text-lg mb-1">
+                        {isSuccess ? 'Payment Successful!' : `Subscribe to ${creatorName}`}
+                    </h3>
+                    {!isSuccess && (
+                        <p className="text-amber-500 font-semibold text-xl">
+                            {price}<span className="text-zinc-500 text-sm font-normal"> / month</span>
+                        </p>
+                    )}
                 </div>
 
                 {/* Body */}
@@ -75,9 +119,18 @@ export default function SubscriptionModal({ isOpen, onClose, creatorName, price,
                             <p className="text-zinc-300 text-center">
                                 You are now subscribed to <span className="text-white font-semibold">{creatorName}</span>
                             </p>
+                            <p className="text-zinc-500 text-sm mt-2">
+                                All exclusive content is now unlocked!
+                            </p>
                         </div>
                     ) : (
                         <>
+                            {error && (
+                                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3 mb-4">
+                                    <p className="text-red-400 text-sm">{error}</p>
+                                </div>
+                            )}
+
                             <p className="text-xs text-zinc-400 mb-4 font-medium uppercase tracking-wider">Select Payment Method</p>
 
                             <div className="space-y-2 mb-6">
@@ -108,7 +161,7 @@ export default function SubscriptionModal({ isOpen, onClose, creatorName, price,
                                                     type="tel"
                                                     value={phoneNumber}
                                                     onChange={(e) => setPhoneNumber(e.target.value)}
-                                                    placeholder="099 123 4567"
+                                                    placeholder="071 234 5678"
                                                     className={`w-full bg-zinc-900 border ${phoneNumberError ? 'border-red-500 focus:border-red-500' : 'border-zinc-700 focus:border-amber-500'} rounded-xl p-3 text-white text-sm outline-none transition-all placeholder:text-zinc-600`}
                                                 />
                                                 <Smartphone className="absolute right-3 top-3 text-zinc-500 w-4.5 h-4.5" />
@@ -119,7 +172,6 @@ export default function SubscriptionModal({ isOpen, onClose, creatorName, price,
                                             </p>
                                         </>
                                     ) : (
-                                        // Card Payment Inputs (Dummy)
                                         <>
                                             <div>
                                                 <label className="block text-xs text-zinc-400 mb-1.5 ml-1">Card Number</label>
@@ -162,7 +214,7 @@ export default function SubscriptionModal({ isOpen, onClose, creatorName, price,
                             <button
                                 onClick={handlePayment}
                                 disabled={processing}
-                                className="w-full bg-white hover:bg-zinc-200 text-zinc-950 font-bold py-3 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-bold py-3.5 rounded-xl shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                             >
                                 {processing ? (
                                     <>

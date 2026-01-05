@@ -1,20 +1,24 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { MockService } from '@/services/mockService';
+import { db } from '@/lib/db';
+import { isSupabaseConfigured } from '@/lib/supabase';
 import { Post } from '@/types';
 import LoginModal from '@/components/modals/LoginModal';
 import SubscriptionModal from '@/components/modals/SubscriptionModal';
 import {
-    HeartHandshake, Search, Bell, Plus, Image as LucideImage, Video, SlidersHorizontal,
-    Check, Star, MoreHorizontal, Lock, Unlock, Heart, MessageCircle, Banknote, Bookmark, X, Loader2
+    HeartHandshake, Search, Bell, Plus,
+    Check, MoreHorizontal, Lock, Heart, MessageCircle, Banknote, Bookmark, X, Loader2, Eye, Sparkles
 } from 'lucide-react';
-import { STORIES, CURRENT_USER } from '@/lib/mockData'; // Keeping STORIES from mockData for now, could migrate too.
+import { STORIES, CURRENT_USER } from '@/lib/mockData';
+
+const POSTS_PER_PAGE = 10;
 
 export default function Feed() {
-    const { isLoggedIn, user } = useAuth();
+    const { isLoggedIn, user, subscribedCreatorIds } = useAuth();
 
     // UI State
     const [activeTab, setActiveTab] = useState<'subscribed' | 'recommended'>('recommended');
@@ -24,30 +28,77 @@ export default function Feed() {
     // Data State
     const [posts, setPosts] = useState<Post[]>([]);
     const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+    const [isLoadingMore, setIsLoadingMore] = useState(false);
+    const [hasMore, setHasMore] = useState(true);
+    const [likedPostIds, setLikedPostIds] = useState<string[]>([]);
 
     // Subscription/Unlock State
-    const [subModalData, setSubModalData] = useState<{ isOpen: boolean; creator: string; price: string; postId?: string }>({ isOpen: false, creator: '', price: '' });
-
-    // Local Interaction State (optimistic updates map)
-    // We can rely on 'posts' state updates from service, but local maps are faster for UI if needed. 
-    // However, MockService returns updated objects, so we can just update 'posts'.
+    const [subModalData, setSubModalData] = useState<{
+        isOpen: boolean;
+        creator: string;
+        creatorId: string;
+        price: string;
+        postId?: string
+    }>({ isOpen: false, creator: '', creatorId: '', price: '' });
 
     // Story Timer
     const STORY_DURATION_MS = 25000;
     const [storyProgress, setStoryProgress] = useState(0);
 
+    // Infinite scroll observer
+    const observerRef = useRef<IntersectionObserver | null>(null);
+    const loadMoreRef = useCallback((node: HTMLDivElement | null) => {
+        if (isLoadingMore) return;
+        if (observerRef.current) observerRef.current.disconnect();
+
+        observerRef.current = new IntersectionObserver(entries => {
+            if (entries[0].isIntersecting && hasMore && !isLoadingPosts) {
+                loadMorePosts();
+            }
+        }, { threshold: 0.1 });
+
+        if (node) observerRef.current.observe(node);
+    }, [isLoadingMore, hasMore, isLoadingPosts]);
+
+    const transformPost = (p: Record<string, unknown>): Post => ({
+        id: p.id as string,
+        creatorId: p.creator_id as string,
+        creatorUsername: p.creator_username as string,
+        creatorAvatar: p.creator_avatar as string || `https://api.dicebear.com/7.x/avataaars/svg?seed=${p.creator_username}`,
+        creatorCountry: p.creator_country as string || '',
+        type: p.type as 'photo' | 'video' | 'album' | 'text' | 'poll',
+        mediaUrls: (p.media_urls as string[]) || [],
+        thumbnailUrl: p.thumbnail_url as string || '',
+        caption: p.caption as string || '',
+        visibility: p.visibility as 'free' | 'subscribers' | 'vip' | 'premium',
+        price: Number(p.price) || 0,
+        likes: Number(p.likes_count) || 0,
+        comments: Number(p.comments_count) || 0,
+        likedBy: [],
+        savedBy: [],
+        publishedAt: new Date(p.published_at as string).getTime(),
+        createdAt: new Date(p.created_at as string).getTime()
+    });
+
     const fetchPosts = async () => {
         setIsLoadingPosts(true);
+        setHasMore(true);
         try {
-            // Fetch based on active tab
-            // For 'subscribed', logic is in MockService if we pass 'following', 
-            // but requirements say 'subscribed' tab. 'following' usually entails subscription in some apps, 
-            // but here follow != subscribe.
-            // Let's just fetch all 'for_you' and filter client side for 'subscribed' for simplicity if service doesn't support 'subscribed' filter yet.
-            // Actually, I'll update getFeed to accept 'subscribed' if needed. 
-            // MockService has 'following' filter. Let's use 'for_you' and filter here for now.
-            const feed = await MockService.getFeed('for_you');
-            setPosts(feed);
+            if (isSupabaseConfigured()) {
+                const supabasePosts = await db.posts.getAll(POSTS_PER_PAGE, 0);
+                const transformedPosts = supabasePosts.map(transformPost);
+                setPosts(transformedPosts);
+                setHasMore(supabasePosts.length === POSTS_PER_PAGE);
+
+                if (user) {
+                    const liked = await db.posts.getLikedPostIds(user.id);
+                    setLikedPostIds(liked);
+                }
+            } else {
+                const feed = await MockService.getFeed('for_you');
+                setPosts(feed);
+                setHasMore(false);
+            }
         } catch (err) {
             console.error('Error fetching posts:', err);
         } finally {
@@ -55,21 +106,38 @@ export default function Feed() {
         }
     };
 
+    const loadMorePosts = async () => {
+        if (!isSupabaseConfigured() || isLoadingMore || !hasMore) return;
+
+        setIsLoadingMore(true);
+        try {
+            const offset = posts.length;
+            const newPosts = await db.posts.getAll(POSTS_PER_PAGE, offset);
+            const transformedPosts = newPosts.map(transformPost);
+
+            if (transformedPosts.length > 0) {
+                setPosts(prev => [...prev, ...transformedPosts]);
+                setHasMore(newPosts.length === POSTS_PER_PAGE);
+            } else {
+                setHasMore(false);
+            }
+        } catch (err) {
+            console.error('Error loading more posts:', err);
+        } finally {
+            setIsLoadingMore(false);
+        }
+    };
+
     useEffect(() => {
         fetchPosts();
-    }, [activeTab]); // Refetch when tab changes? Or just filter locally? better to fetch once and filter locally for speed in mock.
-    // Actually, let's fetch once on mount.
-
-    // Re-run filter when tab changes or user changes (subscriptions loaded)
+    }, []);
 
     // Filtered Content
     const displayedPosts = posts.filter(post => {
         if (activeTab === 'recommended') return true;
         if (activeTab === 'subscribed') {
             if (!isLoggedIn || !user) return false;
-            // Check if user is subscribed to author
-            // Creator ID is post.creatorId
-            return user.subscribedTo.includes(post.creatorId) || post.creatorId === user.id;
+            return subscribedCreatorIds.includes(post.creatorId) || post.creatorId === user.id;
         }
         return true;
     });
@@ -105,23 +173,32 @@ export default function Feed() {
     const toggleLike = async (id: string) => {
         requireAuth(async () => {
             // Optimistic update
-            setPosts(prev => prev.map(p => {
-                if (p.id === id) {
-                    const hasLiked = p.likedBy.includes(user!.id);
-                    return {
-                        ...p,
-                        likes: hasLiked ? p.likes - 1 : p.likes + 1,
-                        likedBy: hasLiked ? p.likedBy.filter(u => u !== user!.id) : [...p.likedBy, user!.id]
-                    };
-                }
-                return p;
-            }));
+            const isCurrentlyLiked = likedPostIds.includes(id);
+
+            if (isCurrentlyLiked) {
+                setLikedPostIds(prev => prev.filter(pId => pId !== id));
+                setPosts(prev => prev.map(p => p.id === id ? { ...p, likes: p.likes - 1 } : p));
+            } else {
+                setLikedPostIds(prev => [...prev, id]);
+                setPosts(prev => prev.map(p => p.id === id ? { ...p, likes: p.likes + 1 } : p));
+            }
 
             // Call service
             try {
-                await MockService.toggleLikePost(id);
+                if (isSupabaseConfigured() && user) {
+                    await db.posts.like(user.id, id);
+                } else {
+                    await MockService.toggleLikePost(id);
+                }
             } catch (e) {
-                // Revert if failed (todo)
+                // Revert on error
+                if (isCurrentlyLiked) {
+                    setLikedPostIds(prev => [...prev, id]);
+                    setPosts(prev => prev.map(p => p.id === id ? { ...p, likes: p.likes + 1 } : p));
+                } else {
+                    setLikedPostIds(prev => prev.filter(pId => pId !== id));
+                    setPosts(prev => prev.map(p => p.id === id ? { ...p, likes: p.likes - 1 } : p));
+                }
                 console.error(e);
             }
         });
@@ -129,43 +206,27 @@ export default function Feed() {
 
     const toggleBookmark = async (id: string) => {
         requireAuth(async () => {
-            // Todo: Implement bookmark state
             await MockService.toggleBookmarkPost(id);
-            alert("Bookmark toggled (mock)");
         });
     };
 
-    const initiateSubscribe = (creatorName: string, price: string = '₦2,500') => {
+    const initiateSubscribe = (creatorId: string, creatorName: string, price: string = 'R2,500') => {
         requireAuth(() => {
-            // Check if already subscribed
-            // We need creatorID to check properly, but for now using name matching or we need to pass creatorId to this function
-            // passed creatorName is mostly for display. 
-            // We should lookup creator by name? Or better, pass creatorId to this function.
-            // Let's assume we can't easily check 'subscribed' without creatorId.
-            // But we know who created the post.
-
-            setSubModalData({ isOpen: true, creator: creatorName, price });
-        });
-    };
-
-    const initiateUnlock = (postId: string, price: string, creatorName: string) => {
-        requireAuth(() => {
-            setSubModalData({ isOpen: true, creator: creatorName, price, postId });
+            setSubModalData({ isOpen: true, creator: creatorName, creatorId, price });
         });
     };
 
     const handleSubscriptionSuccess = () => {
         setSubModalData(prev => ({ ...prev, isOpen: false }));
-        fetchPosts(); // Refresh to see unlocked content? Or just update user.
-        // Actually we need to reload user to update subscriptions list
-        window.location.reload(); // Simple brute force update for mock
+        // No page reload needed - state updates automatically via context
+        fetchPosts(); // Refresh posts to update unlock status
     };
 
     const handleTip = (creatorName: string) => {
         requireAuth(() => {
             const amount = prompt(`How much would you like to tip ${creatorName}? (e.g., 500)`, "500");
             if (amount) {
-                alert(`Tip of ₦${amount} sent to ${creatorName}! You're amazing.`);
+                alert(`Tip of R${amount} sent to ${creatorName}! You're amazing.`);
             }
         });
     };
@@ -177,12 +238,20 @@ export default function Feed() {
     const currentStory = activeStory ? STORIES.find(s => s.id === activeStory) : null;
 
     const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount);
+        return `R${amount.toLocaleString()}`;
+    };
+
+    // Check if post is unlocked for current user
+    const isPostUnlocked = (post: Post): boolean => {
+        if (post.visibility === 'free') return true;
+        if (!user) return false;
+        if (post.creatorId === user.id) return true;
+        return subscribedCreatorIds.includes(post.creatorId);
     };
 
     return (
         <>
-            {/* Mobile Top Header (Visible only on mobile) */}
+            {/* Mobile Top Header */}
             <header className="md:hidden sticky top-0 z-30 glass border-b border-zinc-800/50 px-4 h-14 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                     <div className="w-7 h-7 rounded bg-gradient-to-tr from-amber-600 to-orange-500 flex items-center justify-center text-white">
@@ -201,7 +270,7 @@ export default function Feed() {
             </header>
 
             <div className="max-w-[640px] mx-auto w-full pb-24 md:pb-10">
-                {/* Stories - Only show if logged in */}
+                {/* Stories */}
                 {isLoggedIn && (
                     <div className="pt-4 md:pt-6 px-4 md:px-0">
                         <div className="flex gap-3 md:gap-4 overflow-x-auto no-scrollbar pb-2">
@@ -231,7 +300,7 @@ export default function Feed() {
                     </div>
                 )}
 
-                {/* Inline Composer (Only if logged in) */}
+                {/* Inline Composer */}
                 {isLoggedIn && (
                     <div className="hidden md:block px-4 mb-8 mt-4">
                         <div className="bg-zinc-900/40 border border-zinc-800 rounded-2xl p-4 focus-within:ring-1 focus-within:ring-amber-500/50 transition-all focus-within:bg-zinc-900/60">
@@ -263,10 +332,6 @@ export default function Feed() {
                             Subscribed
                         </button>
                     </div>
-
-                    <button className="p-2 rounded-lg hover:bg-zinc-900 text-zinc-400">
-                        <SlidersHorizontal className="w-4 h-4" />
-                    </button>
                 </div>
 
                 {/* Posts Feed */}
@@ -282,7 +347,7 @@ export default function Feed() {
                             </div>
                             <h3 className="text-zinc-100 font-bold text-lg mb-2">No subscriptions yet</h3>
                             <p className="text-zinc-500 text-sm mb-6 max-w-xs mx-auto">Subscribe to creators to see their exclusive content here.</p>
-                            <Link href="/explore" onClick={() => setActiveTab('recommended')} className="bg-amber-500 text-zinc-950 font-bold py-3 px-8 rounded-full hover:bg-amber-400 transition-colors inline-block">
+                            <Link href="/explore" className="bg-amber-500 text-zinc-950 font-bold py-3 px-8 rounded-full hover:bg-amber-400 transition-colors inline-block">
                                 Find Creators
                             </Link>
                         </div>
@@ -293,22 +358,22 @@ export default function Feed() {
                     )
                 ) : (
                     displayedPosts.map(post => {
-                        const isUnlocked = post.visibility === 'free' || (user && user.subscribedTo.includes(post.creatorId)) || post.creatorId === user?.id; // Simplified unlock logic
+                        const isUnlocked = isPostUnlocked(post);
                         const isLocked = !isUnlocked;
-                        const hasLiked = user ? post.likedBy.includes(user.id) : false;
+                        const hasLiked = likedPostIds.includes(post.id);
 
                         return (
                             <article key={post.id} className="border-b border-zinc-800 md:border md:rounded-2xl md:bg-zinc-900/20 md:border-zinc-800/50 mb-6 overflow-hidden relative group">
+                                {/* Post Header */}
                                 <div className="p-4 flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <Link href={`/profile/${post.creatorUsername}`} className="relative cursor-pointer">
                                             <img src={post.creatorAvatar} alt={post.creatorUsername} className="w-10 h-10 rounded-full object-cover" />
-                                            {/* Verification badge logic if available in post data */}
                                         </Link>
                                         <div>
                                             <div className="flex items-center gap-2">
                                                 <Link href={`/profile/${post.creatorUsername}`} className="text-sm font-semibold text-zinc-100 hover:underline cursor-pointer">
-                                                    {post.creatorUsername} {/* Should use displayName but Post has username/avatar cached */}
+                                                    {post.creatorUsername}
                                                 </Link>
                                                 <span className="text-zinc-500 text-xs">@{post.creatorUsername}</span>
                                             </div>
@@ -323,32 +388,63 @@ export default function Feed() {
                                     </button>
                                 </div>
 
+                                {/* Caption */}
                                 <div className="px-4 pb-3">
                                     <p className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap">
                                         {post.caption}
                                     </p>
                                 </div>
 
-                                {/* Content Area */}
+                                {/* Content Area - ENHANCED LOCKED STATE */}
                                 {isLocked ? (
                                     <div className="w-full aspect-[4/5] bg-zinc-900 relative overflow-hidden">
+                                        {/* Blurred Background Preview */}
                                         {post.thumbnailUrl && (
-                                            <img src={post.thumbnailUrl} className="w-full h-full object-cover blur-2xl opacity-40 scale-110" alt="Locked content" />
+                                            <img
+                                                src={post.thumbnailUrl}
+                                                className="w-full h-full object-cover blur-3xl opacity-50 scale-125 absolute inset-0"
+                                                alt="Locked content preview"
+                                            />
                                         )}
-                                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6 bg-black/40 backdrop-blur-md">
-                                            <div className="bg-zinc-950/60 border border-white/10 p-6 rounded-2xl max-w-[280px] w-full text-center shadow-2xl backdrop-blur-xl">
-                                                <div className="w-12 h-12 bg-zinc-800/80 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-500 border border-zinc-700 shadow-inner">
-                                                    <Lock className="w-[22px] h-[22px]" strokeWidth={2} />
+
+                                        {/* Gradient overlays for depth */}
+                                        <div className="absolute inset-0 bg-gradient-to-t from-zinc-950 via-zinc-950/80 to-transparent" />
+                                        <div className="absolute inset-0 bg-gradient-to-b from-zinc-950/60 via-transparent to-transparent" />
+
+                                        {/* Animated sparkles effect */}
+                                        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                                            <Sparkles className="absolute top-10 left-10 w-4 h-4 text-amber-500/30 animate-pulse" />
+                                            <Sparkles className="absolute top-20 right-16 w-3 h-3 text-amber-500/20 animate-pulse delay-300" />
+                                            <Sparkles className="absolute bottom-32 left-20 w-5 h-5 text-amber-500/25 animate-pulse delay-700" />
+                                        </div>
+
+                                        {/* Lock Overlay CTA */}
+                                        <div className="absolute inset-0 flex flex-col items-center justify-center p-6">
+                                            <div className="bg-zinc-950/80 backdrop-blur-xl border border-zinc-800/80 p-8 rounded-3xl max-w-[320px] w-full text-center shadow-2xl shadow-black/50">
+                                                {/* Pulsing Lock Icon */}
+                                                <div className="relative mb-5">
+                                                    <div className="absolute inset-0 w-16 h-16 mx-auto bg-amber-500/20 rounded-full blur-xl animate-pulse" />
+                                                    <div className="w-16 h-16 bg-gradient-to-br from-amber-500/20 to-orange-500/20 rounded-full flex items-center justify-center mx-auto text-amber-500 border border-amber-500/30 relative">
+                                                        <Lock className="w-7 h-7" strokeWidth={1.5} />
+                                                    </div>
                                                 </div>
-                                                <h4 className="text-zinc-100 font-medium mb-1.5">Unlock this post</h4>
-                                                <p className="text-zinc-400 text-xs mb-5 leading-relaxed">Subscribe to {post.creatorUsername} to access this content.</p>
+
+                                                <h4 className="text-zinc-100 font-semibold text-lg mb-2">Exclusive Content</h4>
+                                                <p className="text-zinc-400 text-sm mb-6 leading-relaxed">
+                                                    Subscribe to <span className="text-amber-500 font-medium">@{post.creatorUsername}</span> to unlock this and all their premium content
+                                                </p>
 
                                                 <button
-                                                    onClick={() => initiateSubscribe(post.creatorUsername, formatCurrency(post.price || 2500))} // Fallback price
-                                                    className="w-full bg-zinc-100 hover:bg-white text-zinc-950 font-semibold py-2.5 rounded-lg text-xs transition-all mb-2.5 shadow hover:shadow-lg"
+                                                    onClick={() => initiateSubscribe(post.creatorId, post.creatorUsername, formatCurrency(post.price || 2500))}
+                                                    className="w-full bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-bold py-3.5 rounded-xl text-sm transition-all shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30 hover:scale-[1.02] active:scale-[0.98]"
                                                 >
-                                                    Subscribe
+                                                    Subscribe for {formatCurrency(post.price || 2500)}/mo
                                                 </button>
+
+                                                <div className="flex items-center justify-center gap-2 mt-4 text-zinc-500 text-xs">
+                                                    <Eye className="w-3.5 h-3.5" />
+                                                    <span>Get instant access to all content</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -357,12 +453,11 @@ export default function Feed() {
                                         {post.type === 'photo' && post.mediaUrls[0] && (
                                             <img src={post.mediaUrls[0]} className="w-full h-auto object-cover max-h-[500px]" alt="Post" />
                                         )}
-                                        {/* Handle other types */}
                                     </div>
                                 )}
 
                                 {/* Footer / Actions */}
-                                <div className={`p-3 md:p-4 ${isLocked ? 'border-t border-zinc-800/50 flex justify-between items-center opacity-40 select-none' : ''}`}>
+                                <div className={`p-3 md:p-4 ${isLocked ? 'opacity-40 pointer-events-none' : ''}`}>
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-1">
                                             <button
@@ -403,12 +498,27 @@ export default function Feed() {
                         );
                     })
                 )}
+
+                {/* Infinite Scroll Trigger */}
+                {!isLoadingPosts && hasMore && (
+                    <div ref={loadMoreRef} className="py-8 flex justify-center">
+                        {isLoadingMore && (
+                            <Loader2 className="w-6 h-6 animate-spin text-amber-500" />
+                        )}
+                    </div>
+                )}
+
+                {/* End of Feed Message */}
+                {!hasMore && posts.length > 0 && (
+                    <div className="py-8 text-center text-zinc-500 text-sm">
+                        You&apos;ve seen all the posts! 🎉
+                    </div>
+                )}
             </div>
 
-            {/* Story Viewer Overlay (Existing logic kept) */}
+            {/* Story Viewer Overlay */}
             {activeStory && currentStory && (
                 <div className="fixed inset-0 z-[100] bg-black flex flex-col items-center justify-center animate-in fade-in duration-200">
-                    {/* Header */}
                     <div className="absolute top-0 left-0 right-0 p-4 z-20 flex items-center justify-between bg-gradient-to-b from-black/80 to-transparent">
                         <div className="flex items-center gap-3">
                             <img src={currentStory.avatar} className="w-8 h-8 rounded-full border border-white/50" alt={currentStory.name} />
@@ -425,10 +535,8 @@ export default function Feed() {
                         </div>
                     </div>
 
-                    {/* Story Content */}
                     <div className="w-full h-full md:max-w-md md:max-h-[85vh] bg-zinc-900 rounded-lg overflow-hidden relative">
                         <img src={currentStory.storyImage || currentStory.avatar} className="w-full h-full object-cover" alt="Story content" />
-                        {/* Progress Bar with Timer */}
                         <div className="absolute top-2 left-2 right-2 flex gap-1 h-1 z-10">
                             <div className="bg-white/30 h-full rounded-full flex-1 overflow-hidden">
                                 <div
@@ -439,7 +547,6 @@ export default function Feed() {
                         </div>
                     </div>
 
-                    {/* Reply Input */}
                     <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 to-transparent z-20">
                         <div className="flex gap-4 max-w-sm mx-auto w-full">
                             <input type="text" placeholder="Send message" className="bg-transparent border border-white/30 rounded-full px-4 py-3 text-white placeholder-white/70 w-full focus:outline-none focus:border-white" />
@@ -456,6 +563,7 @@ export default function Feed() {
                 isOpen={subModalData.isOpen}
                 onClose={() => setSubModalData(prev => ({ ...prev, isOpen: false }))}
                 creatorName={subModalData.creator}
+                creatorId={subModalData.creatorId}
                 price={subModalData.price}
                 onSuccess={handleSubscriptionSuccess}
             />
