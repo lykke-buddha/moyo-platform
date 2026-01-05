@@ -331,6 +331,7 @@ export default function ProfilePage() {
                     isOpen={subModalOpen}
                     onClose={() => setSubModalOpen(false)}
                     creatorName={profile.displayName}
+                    creatorId={profile.id}
                     price={formatCurrency(profile.subscriptionPrice || 2500)}
                     onSuccess={handleSubscriptionSuccess}
                 />

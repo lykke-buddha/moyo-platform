@@ -75,9 +75,20 @@ export default function Feed() {
         likes: Number(p.likes_count) || 0,
         comments: Number(p.comments_count) || 0,
         likedBy: [],
-        savedBy: [],
         publishedAt: new Date(p.published_at as string).getTime(),
-        createdAt: new Date(p.created_at as string).getTime()
+        createdAt: new Date(p.created_at as string).getTime(),
+        // Missing fields with defaults
+        isNSFW: (p.is_nsfw as boolean) || false,
+        tags: (p.tags as string[]) || [],
+        category: (p.category as string) || 'General',
+        shares: Number(p.shares) || 0,
+        views: Number(p.views) || 0,
+        saves: Number(p.saves) || 0,
+        status: (p.status as any) || 'published',
+        updatedAt: p.updated_at ? new Date(p.updated_at as string).getTime() : new Date(p.created_at as string).getTime(),
+        revenue: 0,
+        views_from_subscribers: 0,
+        conversion_rate: 0
     });
 
     const fetchPosts = async () => {
