@@ -4,12 +4,15 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter, useParams } from 'next/navigation';
-import { Loader2, Share2, Mail, MapPin, Link as LinkIcon, Lock, MoreHorizontal, ArrowLeft, Check, ImageOff, User as UserIcon } from 'lucide-react';
+import { Loader2, Share2, MapPin, Link as LinkIcon, Lock, MoreHorizontal, ArrowLeft, Check, ImageOff, User as UserIcon } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { MockService } from '@/services/mockService';
-import { User, Post } from '@/types';
+import { db } from '@/lib/db';
+import { isSupabaseConfigured } from '@/lib/supabase';
+import { User, Post, UserRole } from '@/types';
 import LoginModal from '@/components/modals/LoginModal';
 import SubscriptionModal from '@/components/modals/SubscriptionModal';
+
 // Utility to format currency
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', { style: 'currency', currency: 'NGN' }).format(amount);
@@ -39,15 +42,105 @@ export default function ProfilePage() {
             if (!username) return;
             setIsLoading(true);
             try {
-                // 1. Get User
-                const user = await MockService.getUserByUsername(username);
-                if (user) {
-                    setProfile(user);
-                    // 2. Get Posts
-                    const userPosts = await MockService.getPostsByUserId(user.id);
-                    setPosts(userPosts);
+                if (isSupabaseConfigured()) {
+                    // Fetch real data
+                    const dbUser = await db.users.getByUsername(username);
+                    if (dbUser) {
+                        // Transform DB user to Frontend User
+                        const user: User = {
+                            id: dbUser.id,
+                            email: dbUser.email,
+                            username: dbUser.username,
+                            displayName: dbUser.display_name || dbUser.username,
+                            role: dbUser.role as UserRole,
+                            accountType: dbUser.role as 'creator' | 'fan',
+                            age: dbUser.age || 0,
+                            country: dbUser.country || '',
+                            countryFlag: dbUser.country_flag || '',
+                            category: dbUser.category || '',
+                            bio: dbUser.bio || '',
+                            avatar: dbUser.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${dbUser.username}`,
+                            coverImage: dbUser.cover_image || '',
+                            followersCount: dbUser.followers_count || 0,
+                            followingCount: dbUser.following_count || 0,
+                            subscribersCount: dbUser.subscribers_count || 0,
+                            subscriptionPrice: dbUser.subscription_price || 0,
+                            totalPosts: dbUser.total_posts || 0,
+                            totalLikes: dbUser.total_likes || 0,
+                            totalViews: dbUser.total_views || 0,
+                            totalEarnings: dbUser.total_earnings || 0,
+                            isVerified: dbUser.is_verified || false,
+                            dateOfBirth: { day: 1, month: 1, year: 2000 },
+                            followers: [],
+                            following: [],
+                            subscribers: [],
+                            subscribedTo: [],
+                            subscriptionTiers: [],
+                            canPost: dbUser.role === 'creator',
+                            isOnline: false,
+                            lastSeen: Date.now(),
+                            createdAt: new Date(dbUser.created_at).getTime(),
+                            isLoggedIn: false,
+
+                            // Missing fields added
+                            ageVerified: dbUser.age_verified || false,
+                            countryCode: dbUser.country_code || '',
+                            verificationStatus: dbUser.verification_status || 'pending',
+                            engagementRate: dbUser.engagement_rate || 0,
+                            allowExplicitContent: dbUser.allow_explicit_content || false,
+                            messagingEnabled: dbUser.messaging_enabled || false,
+                            messagingPrice: dbUser.messaging_price || 0,
+                            autoAcceptMessages: dbUser.auto_accept_messages || false,
+                            creatorSince: dbUser.creator_since ? new Date(dbUser.creator_since).getTime() : undefined,
+                            contentRating: dbUser.content_rating || 'sfw'
+                        };
+                        setProfile(user);
+
+                        // Fetch Posts
+                        const dbPosts = await db.posts.getByCreator(user.id);
+                        const transformedPosts: Post[] = dbPosts.map((p: any) => ({
+                            id: p.id,
+                            creatorId: p.creator_id,
+                            creatorUsername: user.username,
+                            creatorAvatar: user.avatar,
+                            creatorCountry: user.country,
+                            type: p.type,
+                            mediaUrls: p.media_urls || [],
+                            thumbnailUrl: p.thumbnail_url || '',
+                            caption: p.caption || '',
+                            visibility: p.visibility,
+                            price: p.price || 0,
+                            likes: p.likes_count || 0,
+                            comments: p.comments_count || 0,
+                            shares: p.shares_count || 0,
+                            views: p.views_count || 0,
+                            saves: 0,
+                            likedBy: [],
+                            publishedAt: new Date(p.published_at || p.created_at).getTime(),
+                            createdAt: new Date(p.created_at).getTime(),
+                            isNSFW: false,
+                            tags: [],
+                            category: '',
+                            status: p.status,
+                            updatedAt: new Date(p.updated_at || p.created_at).getTime(),
+                            revenue: 0,
+                            views_from_subscribers: 0,
+                            conversion_rate: 0
+                        }));
+                        setPosts(transformedPosts);
+                    } else {
+                        setProfile(null);
+                    }
                 } else {
-                    setProfile(null);
+                    // Fallback to Mock
+                    const user = await MockService.getUserByUsername(username);
+                    if (user) {
+                        setProfile(user);
+                        const userPosts = await MockService.getPostsByUserId(user.id);
+                        setPosts(userPosts);
+                    } else {
+                        setProfile(null);
+                    }
                 }
             } catch (err) {
                 console.error('Error loading profile:', err);
@@ -56,12 +149,15 @@ export default function ProfilePage() {
             }
         }
         loadProfile();
-    }, [username, currentUser?.id]); // Reload if current user changes (for optimistic updates potentially) or handle changes
+    }, [username, currentUser?.id]);
 
     // Interaction Handlers
     const isOwner = currentUser?.username.toLowerCase() === username;
-    const isSubscribed = (profile && currentUser?.subscribedTo.includes(profile.id)) || false;
-    const isFollowing = (profile && currentUser?.following.includes(profile.id)) || false;
+    // For real DB, we need to check isFollowing async or rely on AuthContext if it has full list
+    // AuthContext usually has 'following' array. If extensive list, might need async check.
+    // For now, assuming AuthContext 'following' is sufficient or we use db.followers.isFollowing
+    const isSubscribed = (profile && currentUser?.subscribedTo?.includes(profile.id)) || false;
+    const isFollowing = (profile && currentUser?.following?.includes(profile.id)) || false;
 
     const handleSubscribe = async () => {
         if (!isLoggedIn) {
@@ -76,25 +172,23 @@ export default function ProfilePage() {
             setShowLoginModal(true);
             return;
         }
-        if (!profile) return;
+        if (!profile || !currentUser) return;
 
         try {
-            await MockService.toggleFollow(profile.id);
-            // Quick optimistic update or force reload?
-            // MockService returns updated CURRENT user.
-            // We need to reflect that in the UI. 
-            // The AuthContext updateProfile might be needed or just re-fetch profile to update follower count? 
-            // MockService doesn't return the *targets* updated follower count in toggleFollow, it returns currentUser.
-            // So we should re-fetch profile.
-            const updatedProfile = await MockService.getUserByUsername(username);
-            if (updatedProfile) setProfile(updatedProfile);
-            // Also need to update global user state -> actually AuthContext handles session updates?
-            // AuthContext.checkSession might be needed or we assume AuthContext updates itself?
-            // AuthContext doesn't auto-poll.
-            // For now, reload window to sync everything is safest for this mock, or implementing a reloadUser in context.
-            window.location.reload();
+            if (isSupabaseConfigured()) {
+                if (isFollowing) {
+                    await db.followers.unfollow(currentUser.id, profile.id);
+                } else {
+                    await db.followers.follow(currentUser.id, profile.id);
+                }
+                // Refresh to update UI - ideally update context/swr
+                window.location.reload();
+            } else {
+                await MockService.toggleFollow(profile.id);
+                window.location.reload();
+            }
         } catch (e) {
-            console.error(e);
+            console.error('Follow error:', e);
         }
     };
 

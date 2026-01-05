@@ -166,7 +166,7 @@ function ExplorePageSection({ section }: { section: ExploreSection }) {
             {section.subtitle && (
                 <p className="text-zinc-500 text-sm mb-4 -mt-2">{section.subtitle}</p>
             )}
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {section.creators.slice(0, 8).map((item) => (
                     <CreatorCard
                         key={item.creator.id}
@@ -533,7 +533,7 @@ export default function ExplorePage() {
                         <h2 className="text-zinc-100 font-semibold text-lg mb-4">
                             {searchQuery ? `Results for "${searchQuery}"` : 'Creators'}
                         </h2>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {searchResults.map((creator) => (
                                 <CreatorCard
                                     key={creator.id}
